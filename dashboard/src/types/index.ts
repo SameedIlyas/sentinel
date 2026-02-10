@@ -145,17 +145,56 @@ export interface AuditLogListResponse {
 
 // Alert Types
 export interface Alert {
-  id: number;
+  id: string;
   timestamp: string;
   severity: 'low' | 'medium' | 'high' | 'critical';
   alert_type: string;
-  agent_id?: string;
-  policy_id?: number;
-  message: string;
-  details?: Record<string, any>;
+  agent_id: string;
+  description: string;
+  audit_log_id: string | null;
   acknowledged: boolean;
-  acknowledged_by?: string;
-  acknowledged_at?: string;
+  acknowledged_by: string | null;
+  acknowledged_at: string | null;
+}
+
+export interface AlertListResponse {
+  alerts: Alert[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface AlertRule {
+  id: string;
+  policy_type: string | null;
+  alert_type: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  conditions: Record<string, any> | null;
+  slack_webhook_url: string | null;
+  enabled: boolean;
+  created_at: string;
+}
+
+export interface AlertRuleCreate {
+  policy_type?: 'data_access' | 'financial' | 'data_protection' | 'system_access' | null;
+  alert_type: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  conditions?: Record<string, any>;
+  slack_webhook_url?: string;
+  enabled?: boolean;
+}
+
+export interface AlertConfigRequest {
+  global_slack_webhook?: string;
+  alert_rules?: AlertRuleCreate[];
+  deduplication_window_seconds?: number;
+}
+
+export interface SlackConfig {
+  webhook_url: string;
+  channel?: string;
+  enabled: boolean;
 }
 
 // Dashboard Metrics
