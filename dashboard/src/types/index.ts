@@ -120,16 +120,27 @@ export interface PolicyUpdate {
 
 // Audit Log Types
 export interface AuditLog {
-  id: number;
+  id: string;
   timestamp: string;
   agent_id: string;
+  agent_name?: string;
   user_id?: string;
+  tool_name?: string;
+  arguments?: Record<string, any>;
   system_accessed: string;
-  action: string;
   data_touched?: string;
-  policy_decision: 'allow' | 'block' | 'require_approval';
-  policy_id?: number;
-  details?: Record<string, any>;
+  decision: 'allowed' | 'blocked' | 'approved';
+  policy_ids?: string[];
+  reason?: string;
+  metadata?: Record<string, any>;
+}
+
+export interface AuditLogListResponse {
+  logs: AuditLog[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
 }
 
 // Alert Types

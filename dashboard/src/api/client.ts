@@ -166,6 +166,14 @@ class ApiClient {
     const response = await this.client.patch<T>(url, data);
     return response.data;
   }
+
+  async getBlob(url: string, params?: any): Promise<Blob> {
+    const response = await this.client.get(url, {
+      params,
+      responseType: 'blob',
+    });
+    return response.data;
+  }
 }
 
 // Export singleton instance

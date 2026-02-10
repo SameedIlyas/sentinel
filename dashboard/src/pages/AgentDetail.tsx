@@ -148,7 +148,7 @@ const AgentDetail: React.FC = () => {
   }
 
   const blockedActions = recentActivity.filter(
-    (log) => log.policy_decision === 'block'
+    (log) => log.decision === 'blocked'
   );
 
   return (
@@ -332,7 +332,7 @@ const AgentDetail: React.FC = () => {
                           </TableCell>
                           <TableCell>
                             <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                              {log.action}
+                              {log.tool_name || 'N/A'}
                             </Typography>
                           </TableCell>
                           <TableCell>
@@ -340,7 +340,7 @@ const AgentDetail: React.FC = () => {
                           </TableCell>
                           <TableCell>
                             <Typography variant="caption" color="text.secondary">
-                              {log.details?.reason || 'Policy violation'}
+                              {log.reason || 'Policy violation'}
                             </Typography>
                           </TableCell>
                         </TableRow>
@@ -378,7 +378,7 @@ const AgentDetail: React.FC = () => {
                     <TableBody>
                       {recentActivity.map((log) => (
                         <TableRow key={log.id}>
-                          <TableCell>{getDecisionIcon(log.policy_decision)}</TableCell>
+                          <TableCell>{getDecisionIcon(log.decision)}</TableCell>
                           <TableCell>
                             <Typography variant="body2">
                               {format(new Date(log.timestamp), 'MMM dd, yyyy HH:mm:ss')}
@@ -389,7 +389,7 @@ const AgentDetail: React.FC = () => {
                           </TableCell>
                           <TableCell>
                             <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                              {log.action}
+                              {log.tool_name || 'N/A'}
                             </Typography>
                           </TableCell>
                           <TableCell>
@@ -397,8 +397,8 @@ const AgentDetail: React.FC = () => {
                           </TableCell>
                           <TableCell>
                             <Chip
-                              label={log.policy_decision.toUpperCase()}
-                              color={getDecisionColor(log.policy_decision)}
+                              label={log.decision.toUpperCase()}
+                              color={getDecisionColor(log.decision)}
                               size="small"
                             />
                           </TableCell>
