@@ -6,7 +6,8 @@ import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import Login from '@/components/auth/Login';
 import AppLayout from '@/components/layout/AppLayout';
 import Dashboard from '@/pages/Dashboard';
-import Agents from '@/pages/Agents';
+import AgentList from '@/pages/AgentList';
+import AgentDetail from '@/pages/AgentDetail';
 import Policies from '@/pages/Policies';
 import AuditLogs from '@/pages/AuditLogs';
 import Alerts from '@/pages/Alerts';
@@ -74,7 +75,8 @@ const App: React.FC = () => {
               }
             >
               <Route path="/" element={<Dashboard />} />
-              <Route path="/agents" element={<Agents />} />
+              <Route path="/agents" element={<AgentList />} />
+              <Route path="/agents/:agentId" element={<AgentDetail />} />
               <Route path="/policies" element={<Policies />} />
               <Route path="/audit" element={<AuditLogs />} />
               <Route path="/alerts" element={<Alerts />} />

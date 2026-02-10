@@ -42,6 +42,25 @@ export interface Agent {
   metadata?: Record<string, any>;
 }
 
+export interface AgentListResponse {
+  agents: Agent[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface AgentActivityMetrics {
+  agent_id: string;
+  total_actions: number;
+  blocked_actions: number;
+  allowed_actions: number;
+  systems_accessed: string[];
+  first_seen: string;
+  last_active: string;
+  status: string;
+}
+
 // Policy Types
 export interface Policy {
   id: number;
