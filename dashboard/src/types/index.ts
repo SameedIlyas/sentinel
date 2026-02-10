@@ -63,7 +63,7 @@ export interface AgentActivityMetrics {
 
 // Policy Types
 export interface Policy {
-  id: number;
+  id: string;
   name: string;
   description?: string;
   policy_type: string;
@@ -73,6 +73,7 @@ export interface Policy {
   priority?: number;
   created_at: string;
   updated_at?: string;
+  created_by?: string;
 }
 
 export interface PolicyRule {
@@ -87,6 +88,34 @@ export interface PolicyCondition {
   field: string;
   operator: string;
   value: any;
+}
+
+export interface PolicyListResponse {
+  policies: Policy[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface PolicyCreate {
+  name: string;
+  description?: string;
+  policy_type: string;
+  rules: PolicyRule[];
+  applies_to: string[];
+  enabled?: boolean;
+  priority?: number;
+}
+
+export interface PolicyUpdate {
+  name?: string;
+  description?: string;
+  policy_type?: string;
+  rules?: PolicyRule[];
+  applies_to?: string[];
+  enabled?: boolean;
+  priority?: number;
 }
 
 // Audit Log Types

@@ -8,7 +8,8 @@ import AppLayout from '@/components/layout/AppLayout';
 import Dashboard from '@/pages/Dashboard';
 import AgentList from '@/pages/AgentList';
 import AgentDetail from '@/pages/AgentDetail';
-import Policies from '@/pages/Policies';
+import PolicyList from '@/pages/PolicyList';
+import PolicyEditor from '@/pages/PolicyEditor';
 import AuditLogs from '@/pages/AuditLogs';
 import Alerts from '@/pages/Alerts';
 import Users from '@/pages/Users';
@@ -77,7 +78,9 @@ const App: React.FC = () => {
               <Route path="/" element={<Dashboard />} />
               <Route path="/agents" element={<AgentList />} />
               <Route path="/agents/:agentId" element={<AgentDetail />} />
-              <Route path="/policies" element={<Policies />} />
+              <Route path="/policies" element={<PolicyList />} />
+              <Route path="/policies/create" element={<PolicyEditor />} />
+              <Route path="/policies/:policyId/edit" element={<PolicyEditor />} />
               <Route path="/audit" element={<AuditLogs />} />
               <Route path="/alerts" element={<Alerts />} />
               <Route
