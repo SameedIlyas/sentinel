@@ -18,7 +18,6 @@ import {
 } from '@mui/material';
 import {
   SmartToy,
-  Policy,
   Block,
   AttachMoney,
   Warning,
@@ -183,12 +182,6 @@ const Dashboard: React.FC = () => {
     actions: agent.action_count,
   }));
 
-  const violationsData = metrics.policy_violations.slice(0, 5).map((violation, index) => ({
-    name: violation.policy_name,
-    count: violation.count,
-    fill: COLORS[index % COLORS.length],
-  }));
-
   const systemsData = metrics.systems_accessed.slice(0, 10).map((system) => ({
     name: system.system,
     accesses: system.access_count,
@@ -317,12 +310,12 @@ const Dashboard: React.FC = () => {
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      label={(entry) => `${entry.name}: ${entry.value}`}
+                      label={(entry: { name: string; value: number }) => `${entry.name}: ${entry.value}`}
                       outerRadius={80}
                       fill="#8884d8"
                       dataKey="value"
                     >
-                      {alertsData.map((entry, index) => (
+                      {alertsData.map((_entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>

@@ -158,7 +158,7 @@ export const useDashboardWebSocket = (
     onOpen: () => {
       console.log('Connected to dashboard updates');
     },
-    onClose: (event) => {
+    onClose: (_event) => {
       console.log('Disconnected from dashboard updates');
     },
   });
