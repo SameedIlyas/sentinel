@@ -220,3 +220,94 @@ class AuditLogSearchRequest(BaseModel):
     end_date: Optional[datetime] = Field(None, description="Filter until this date")
     page: int = Field(1, ge=1, description="Page number")
     page_size: int = Field(20, ge=1, le=100, description="Items per page")
+
+
+# ============================================================================
+# Alert Schemas
+# ============================================================================
+
+class AlertSeverity(str, Enum):
+    """Alert severity enumeration"""
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+class AlertCreate(BaseModel):
+    """Schema for creating an alert"""
+    severity: AlertSeverity
+    alert_type: str = Field(..., description="Type of alert (blocked_access, high_transaction, new_agent, etc.)")
+    agent_id: str = Field(..., description="ID of agent that triggered the alert")
+    description: str = Field(..., description="Human-readable alert description")
+    audit_log_id: Optional[str] = Field(None, description="Related audit log entry ID")
+
+
+class AlertResponse(BaseModel):
+    """Schema for alert response"""
+    id: str
+    timestamp: datetime
+    severity: str
+    alert_type: str
+    agent_id: str
+    description: str
+    audit_log_id: Optional[str]
+    acknowledged: bool
+    acknowledged_by: Optional[str]
+    acknowledged_at: Optional[datetime]
+    
+    class Config:
+        from_attributes = True
+
+
+class AlertAcknowledge(BaseModel):
+    """Schema for acknowledging an alert"""
+    acknowledged_by: str = Field(..., description="ID of user acknowledging the alert")
+
+
+class AlertListResponse(BaseModel):
+    """Schema for paginated alert list response"""
+    alerts: List[AlertResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
+class SlackConfig(BaseModel):
+    """Schema for Slack webhook configuration"""
+    webhook_url: str = Field(..., description="Slack webhook URL")
+    channel: Optional[str] = Field(None, description="Slack channel name (optional, can be in webhook)")
+    enabled: bool = Field(True, description="Whether Slack notifications are enabled")
+
+
+class AlertRuleCreate(BaseModel):
+    """Schema for creating an alert rule"""
+    policy_type: Optional[PolicyType] = Field(None, description="Policy type to trigger alerts for")
+    alert_type: str = Field(..., description="Type of alert to trigger")
+    severity: AlertSeverity = Field(..., description="Severity of triggered alerts")
+    conditions: Optional[Dict[str, Any]] = Field(None, description="Additional conditions for triggering")
+    slack_webhook_url: Optional[str] = Field(None, description="Slack webhook URL for this alert rule")
+    enabled: bool = Field(True, description="Whether this alert rule is enabled")
+
+
+class AlertRuleResponse(BaseModel):
+    """Schema for alert rule response"""
+    id: str
+    policy_type: Optional[str]
+    alert_type: str
+    severity: str
+    conditions: Optional[Dict[str, Any]]
+    slack_webhook_url: Optional[str]
+    enabled: bool
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class AlertConfigRequest(BaseModel):
+    """Schema for configuring alert system"""
+    global_slack_webhook: Optional[str] = Field(None, description="Global Slack webhook URL")
+    alert_rules: Optional[List[AlertRuleCreate]] = Field(None, description="Alert rules configuration")
+    deduplication_window_seconds: Optional[int] = Field(300, ge=0, description="Time window for alert deduplication (seconds)")

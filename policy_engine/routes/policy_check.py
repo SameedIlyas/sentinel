@@ -4,12 +4,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 import logging
 from datetime import datetime
+from typing import Optional
 
 from policy_engine.database import get_db
 from policy_engine.auth.api_key import get_current_agent
-from policy_engine.models.schemas import PolicyCheckRequest, PolicyCheckResponse
+from policy_engine.models.schemas import PolicyCheckRequest, PolicyCheckResponse, PolicyType
 from policy_engine.services.policy_evaluation import PolicyEvaluationService
 from policy_engine.models.audit_log import AuditLog
+from policy_engine.models.alert_config import AlertConfig
+from policy_engine.services.alert_service import AlertService
+from policy_engine.services.slack_service import slack_service
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -55,9 +59,131 @@ def create_audit_log(
         
         logger.debug(f"Created audit log for agent={request.agent_id}, tool={request.tool_name}")
         
+        return audit_log.id
+        
     except Exception as e:
         logger.error(f"Failed to create audit log: {str(e)}", exc_info=True)
         # Don't fail the policy check if audit logging fails
+        db.rollback()
+        return None
+
+
+def trigger_alert(
+    db: Session,
+    request: PolicyCheckRequest,
+    response: PolicyCheckResponse,
+    audit_log_id: Optional[str] = None
+):
+    """
+    Trigger alerts based on policy check results
+    
+    Args:
+        db: Database session
+        request: Policy check request
+        response: Policy check response
+        audit_log_id: Related audit log ID
+    """
+    try:
+        alert_service = AlertService(db)
+        
+        # Determine if alert should be triggered
+        if not alert_service.should_trigger_alert(
+            decision=response.decision,
+            is_new_agent=False  # TODO: Track new agent detection
+        ):
+            return
+        
+        # Determine policy type from response (check first policy ID)
+        policy_type = None
+        if response.policy_ids:
+            from policy_engine.models.policy import Policy
+            first_policy = db.query(Policy).filter(
+                Policy.id == response.policy_ids[0]
+            ).first()
+            if first_policy:
+                try:
+                    policy_type = PolicyType(first_policy.policy_type)
+                except ValueError:
+                    pass
+        
+        # Classify severity and determine alert type
+        severity = alert_service.classify_severity(
+            policy_type=policy_type if policy_type else PolicyType.ACCESS_CONTROL,
+            decision=response.decision,
+            is_new_agent=False
+        )
+        
+        alert_type = alert_service.determine_alert_type(
+            policy_type=policy_type if policy_type else PolicyType.ACCESS_CONTROL,
+            decision=response.decision,
+            tool_name=request.tool_name,
+            is_new_agent=False
+        )
+        
+        if not alert_type:
+            return
+        
+        # Build alert description
+        description = (
+            f"Agent '{request.agent_id}' attempted action '{request.tool_name}' "
+            f"which was {response.decision}. Reason: {response.reason}"
+        )
+        
+        # Create alert
+        alert = alert_service.create_alert(
+            severity=severity,
+            alert_type=alert_type,
+            agent_id=request.agent_id,
+            description=description,
+            audit_log_id=audit_log_id,
+            auto_deduplicate=True
+        )
+        
+        if not alert:
+            logger.debug("Alert was deduplicated")
+            return
+        
+        # Send to Slack if configured
+        # Get global webhook or policy-specific webhook
+        global_webhook_config = db.query(AlertConfig).filter(
+            AlertConfig.alert_type == "_global_webhook"
+        ).first()
+        
+        webhook_url = None
+        if global_webhook_config and global_webhook_config.enabled:
+            webhook_url = global_webhook_config.slack_webhook_url
+        
+        # Check for alert-type specific webhook
+        alert_rule = db.query(AlertConfig).filter(
+            AlertConfig.alert_type == alert_type,
+            AlertConfig.enabled == True
+        ).first()
+        
+        if alert_rule and alert_rule.slack_webhook_url:
+            webhook_url = alert_rule.slack_webhook_url
+        
+        if webhook_url:
+            # Send alert to Slack (async, don't block on failure)
+            try:
+                policy_name = first_policy.name if first_policy else None
+                slack_service.send_alert(
+                    alert=alert,
+                    agent_name=request.agent_id,  # Could be enhanced with agent name lookup
+                    policy_violated=policy_name,
+                    action_attempted=request.tool_name,
+                    webhook_url=webhook_url
+                )
+            except Exception as slack_error:
+                logger.error(f"Failed to send Slack alert: {str(slack_error)}")
+        
+        logger.info(
+            f"Alert triggered: id={alert.id}, type={alert_type}, "
+            f"severity={severity.value}, agent={request.agent_id}"
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to trigger alert: {str(e)}", exc_info=True)
+        # Don't fail the policy check if alerting fails
         db.rollback()
 
 
@@ -101,7 +227,10 @@ async def check_policy(
         response = evaluation_service.evaluate(request)
         
         # Create audit log entry
-        create_audit_log(db, request, response)
+        audit_log_id = create_audit_log(db, request, response)
+        
+        # Trigger alerts for policy violations
+        trigger_alert(db, request, response, audit_log_id)
         
         # Log the decision
         logger.info(
@@ -126,7 +255,10 @@ async def check_policy(
         )
         
         # Log the error response
-        create_audit_log(db, request, error_response)
+        audit_log_id = create_audit_log(db, request, error_response)
+        
+        # Trigger alerts for error-induced blocks
+        trigger_alert(db, request, error_response, audit_log_id)
         
         return error_response
 
@@ -181,7 +313,10 @@ async def check_policies_batch(
             responses.append(response)
             
             # Create audit log entry
-            create_audit_log(db, request, response)
+            audit_log_id = create_audit_log(db, request, response)
+            
+            # Trigger alerts for policy violations
+            trigger_alert(db, request, response, audit_log_id)
             
         except Exception as e:
             logger.error(f"Batch evaluation error for tool={request.tool_name}: {str(e)}")
@@ -195,8 +330,9 @@ async def check_policies_batch(
             )
             responses.append(error_response)
             
-            # Log the error response
-            create_audit_log(db, request, error_response)
+            # Log the error response and trigger alerts
+            audit_log_id = create_audit_log(db, request, error_response)
+            trigger_alert(db, request, error_response, audit_log_id)
     
     return responses
 
