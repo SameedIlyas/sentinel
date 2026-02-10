@@ -1,0 +1,227 @@
+"""Policy check/evaluation endpoints"""
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+import logging
+from datetime import datetime
+
+from policy_engine.database import get_db
+from policy_engine.auth.api_key import get_current_agent
+from policy_engine.models.schemas import PolicyCheckRequest, PolicyCheckResponse
+from policy_engine.services.policy_evaluation import PolicyEvaluationService
+from policy_engine.models.audit_log import AuditLog
+
+router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+def create_audit_log(
+    db: Session,
+    request: PolicyCheckRequest,
+    response: PolicyCheckResponse
+):
+    """
+    Create an audit log entry for a policy check
+    
+    Args:
+        db: Database session
+        request: Policy check request
+        response: Policy check response
+    """
+    try:
+        # Map policy decision to audit log decision
+        decision_map = {
+            'allow': 'allowed',
+            'block': 'blocked',
+            'require_approval': 'approved'  # Or could be 'pending'
+        }
+        
+        audit_log = AuditLog(
+            agent_id=request.agent_id,
+            user_id=request.user_id,
+            tool_name=request.tool_name,
+            tool_args=request.tool_args,
+            tool_result=None,  # Not available at check time
+            policy_ids=response.policy_ids,
+            decision=decision_map.get(response.decision, 'blocked'),
+            reason=response.reason,
+            system=request.context.get('system') if request.context else None,
+            session_id=request.session_id,
+            timestamp=datetime.utcnow()
+        )
+        
+        db.add(audit_log)
+        db.commit()
+        
+        logger.debug(f"Created audit log for agent={request.agent_id}, tool={request.tool_name}")
+        
+    except Exception as e:
+        logger.error(f"Failed to create audit log: {str(e)}", exc_info=True)
+        # Don't fail the policy check if audit logging fails
+        db.rollback()
+
+
+@router.post("/check", response_model=PolicyCheckResponse)
+async def check_policy(
+    request: PolicyCheckRequest,
+    agent_id: str = Depends(get_current_agent),
+    db: Session = Depends(get_db)
+):
+    """
+    Evaluate policies for a tool call
+    
+    This endpoint is the core of the Policy Engine. It receives a tool call
+    request from an AI agent and evaluates all applicable policies to determine
+    whether the action should be allowed, blocked, or requires approval.
+    
+    Args:
+        request: Policy check request containing tool call details
+        agent_id: Authenticated agent ID from API key
+        db: Database session
+        
+    Returns:
+        Policy check response with decision and explanation
+        
+    Raises:
+        HTTPException: If evaluation fails
+    """
+    try:
+        # Ensure the agent_id in request matches authenticated agent
+        if request.agent_id != agent_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Agent ID in request ({request.agent_id}) does not match authenticated agent ({agent_id})"
+            )
+        
+        # Initialize policy evaluation service
+        evaluation_service = PolicyEvaluationService(db)
+        
+        # Evaluate policies
+        logger.info(f"Evaluating policies for agent={request.agent_id}, tool={request.tool_name}")
+        response = evaluation_service.evaluate(request)
+        
+        # Create audit log entry
+        create_audit_log(db, request, response)
+        
+        # Log the decision
+        logger.info(
+            f"Policy decision for agent={request.agent_id}, tool={request.tool_name}: "
+            f"{response.decision} - {response.reason}"
+        )
+        
+        return response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Policy evaluation error: {str(e)}", exc_info=True)
+        
+        # Fail-safe: block on error
+        error_response = PolicyCheckResponse(
+            decision='block',
+            reason=f"Policy evaluation failed: {str(e)}. Blocking for safety.",
+            masked_data=None,
+            policy_ids=[],
+            metadata={'error': str(e), 'fail_safe': True}
+        )
+        
+        # Log the error response
+        create_audit_log(db, request, error_response)
+        
+        return error_response
+
+
+@router.post("/check/batch", response_model=list[PolicyCheckResponse])
+async def check_policies_batch(
+    requests: list[PolicyCheckRequest],
+    agent_id: str = Depends(get_current_agent),
+    db: Session = Depends(get_db)
+):
+    """
+    Evaluate policies for multiple tool calls in batch
+    
+    This endpoint allows evaluating multiple tool calls in a single request
+    for improved performance.
+    
+    Args:
+        requests: List of policy check requests
+        agent_id: Authenticated agent ID from API key
+        db: Database session
+        
+    Returns:
+        List of policy check responses
+        
+    Raises:
+        HTTPException: If batch size exceeds limit
+    """
+    # Limit batch size
+    MAX_BATCH_SIZE = 100
+    if len(requests) > MAX_BATCH_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Batch size ({len(requests)}) exceeds maximum ({MAX_BATCH_SIZE})"
+        )
+    
+    # Validate all requests belong to authenticated agent
+    for request in requests:
+        if request.agent_id != agent_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Agent ID mismatch in batch request"
+            )
+    
+    # Initialize policy evaluation service
+    evaluation_service = PolicyEvaluationService(db)
+    
+    # Evaluate all requests
+    responses = []
+    for request in requests:
+        try:
+            response = evaluation_service.evaluate(request)
+            responses.append(response)
+            
+            # Create audit log entry
+            create_audit_log(db, request, response)
+            
+        except Exception as e:
+            logger.error(f"Batch evaluation error for tool={request.tool_name}: {str(e)}")
+            # Fail-safe for individual request
+            error_response = PolicyCheckResponse(
+                decision='block',
+                reason=f"Policy evaluation failed: {str(e)}",
+                masked_data=None,
+                policy_ids=[],
+                metadata={'error': str(e), 'fail_safe': True}
+            )
+            responses.append(error_response)
+            
+            # Log the error response
+            create_audit_log(db, request, error_response)
+    
+    return responses
+
+
+@router.delete("/check/cache", status_code=status.HTTP_204_NO_CONTENT)
+async def clear_evaluation_cache(
+    agent_id: str = Depends(get_current_agent),
+    db: Session = Depends(get_db)
+):
+    """
+    Clear the policy evaluation cache
+    
+    This endpoint allows clearing the evaluation cache, which can be useful
+    after updating policies to ensure new policies are immediately applied.
+    
+    Args:
+        agent_id: Authenticated agent ID from API key
+        db: Database session
+        
+    Returns:
+        No content
+    """
+    evaluation_service = PolicyEvaluationService(db)
+    evaluation_service.clear_cache()
+    
+    logger.info(f"Policy evaluation cache cleared by agent={agent_id}")
+    
+    return None
