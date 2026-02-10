@@ -11,7 +11,7 @@ from policy_engine.config import settings
 from policy_engine.middleware.logging import LoggingMiddleware
 from policy_engine.middleware.error_handler import ErrorHandlerMiddleware
 from policy_engine.middleware.rate_limiter import RateLimitMiddleware
-from policy_engine.routes import health, agents, policies, policy_check, audit, alerts
+from policy_engine.routes import health, agents, policies, policy_check, audit, alerts, auth, users, dashboard, websocket
 
 # Configure logging
 logging.basicConfig(
@@ -57,6 +57,10 @@ app.add_middleware(RateLimitMiddleware)
 
 # Include routers
 app.include_router(health.router, tags=["health"])
+app.include_router(auth.router, prefix="/v1/auth", tags=["authentication"])
+app.include_router(users.router, prefix="/v1/users", tags=["users"])
+app.include_router(dashboard.router, prefix="/v1/dashboard", tags=["dashboard"])
+app.include_router(websocket.router, tags=["websocket"])  # WebSocket doesn't use prefix
 app.include_router(agents.router, prefix="/v1/agents", tags=["agents"])
 app.include_router(policies.router, prefix="/v1/policies", tags=["policies"])
 app.include_router(policy_check.router, prefix="/v1/policy", tags=["policy-evaluation"])

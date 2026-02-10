@@ -14,6 +14,7 @@ from policy_engine.models.audit_log import AuditLog
 from policy_engine.models.alert_config import AlertConfig
 from policy_engine.services.alert_service import AlertService
 from policy_engine.services.slack_service import slack_service
+from policy_engine.services.agent_activity_service import AgentActivityService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -219,6 +220,16 @@ async def check_policy(
                 detail=f"Agent ID in request ({request.agent_id}) does not match authenticated agent ({agent_id})"
             )
         
+        # Register or update agent activity (auto-registration on first SDK call)
+        AgentActivityService.register_or_update_agent(
+            db=db,
+            agent_id=agent_id,
+            agent_name=request.context.get('agent_name') if request.context else None,
+            owner_user_id=request.user_id,
+            llm_provider=request.context.get('llm_provider') if request.context else None,
+            metadata=request.context or {}
+        )
+        
         # Initialize policy evaluation service
         evaluation_service = PolicyEvaluationService(db)
         
@@ -301,6 +312,18 @@ async def check_policies_batch(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Agent ID mismatch in batch request"
             )
+    
+    # Register or update agent activity (use first request for metadata)
+    if requests:
+        first_request = requests[0]
+        AgentActivityService.register_or_update_agent(
+            db=db,
+            agent_id=agent_id,
+            agent_name=first_request.context.get('agent_name') if first_request.context else None,
+            owner_user_id=first_request.user_id,
+            llm_provider=first_request.context.get('llm_provider') if first_request.context else None,
+            metadata=first_request.context or {}
+        )
     
     # Initialize policy evaluation service
     evaluation_service = PolicyEvaluationService(db)

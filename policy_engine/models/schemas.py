@@ -311,3 +311,253 @@ class AlertConfigRequest(BaseModel):
     global_slack_webhook: Optional[str] = Field(None, description="Global Slack webhook URL")
     alert_rules: Optional[List[AlertRuleCreate]] = Field(None, description="Alert rules configuration")
     deduplication_window_seconds: Optional[int] = Field(300, ge=0, description="Time window for alert deduplication (seconds)")
+
+
+# ============================================================================
+# Agent Schemas
+# ============================================================================
+
+class AgentStatus(str, Enum):
+    """Agent status enumeration"""
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    SUSPENDED = "suspended"
+
+
+class AgentCreate(BaseModel):
+    """Schema for creating a new agent"""
+    id: str = Field(..., min_length=1, max_length=255, description="Unique agent identifier")
+    name: str = Field(..., min_length=1, max_length=255, description="Agent name")
+    description: Optional[str] = Field(None, max_length=1000, description="Agent description")
+    owner_user_id: str = Field(..., description="User ID who owns this agent")
+    llm_provider: Optional[str] = Field(None, description="LLM provider (openai, anthropic, azure, gemini)")
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional agent metadata")
+
+
+class AgentUpdate(BaseModel):
+    """Schema for updating an agent"""
+    name: Optional[str] = Field(None, min_length=1, max_length=255, description="Agent name")
+    description: Optional[str] = Field(None, max_length=1000, description="Agent description")
+    status: Optional[AgentStatus] = Field(None, description="Agent status")
+    llm_provider: Optional[str] = Field(None, description="LLM provider")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional agent metadata")
+
+
+class AgentResponse(BaseModel):
+    """Schema for agent response"""
+    id: str
+    name: str
+    description: Optional[str]
+    owner_user_id: str
+    created_at: datetime
+    last_active: datetime
+    status: str
+    llm_provider: Optional[str]
+    metadata: Dict[str, Any]
+    
+    class Config:
+        from_attributes = True
+
+
+class AgentListResponse(BaseModel):
+    """Schema for paginated agent list response"""
+    agents: List[AgentResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
+class AgentActivityMetrics(BaseModel):
+    """Schema for agent activity metrics"""
+    agent_id: str
+    total_actions: int
+    blocked_actions: int
+    allowed_actions: int
+    systems_accessed: List[str]
+    first_seen: datetime
+    last_active: datetime
+    status: str
+
+
+class AgentMetricsResponse(BaseModel):
+    """Schema for agent metrics response"""
+    metrics: List[AgentActivityMetrics]
+    total_agents: int
+    active_agents: int
+    inactive_agents: int
+    suspended_agents: int
+
+
+# ============================================================================
+# RBAC / User Management Schemas
+# ============================================================================
+
+class UserRole(str, Enum):
+    """User role enumeration"""
+    ADMIN = "admin"
+    ANALYST = "analyst"
+    VIEWER = "viewer"
+
+
+class UserCreate(BaseModel):
+    """Schema for creating a new user"""
+    username: str = Field(..., min_length=3, max_length=50, description="Unique username")
+    email: str = Field(..., description="User email address")
+    password: str = Field(..., min_length=8, description="User password (min 8 characters)")
+    role: UserRole = Field(default=UserRole.VIEWER, description="User role")
+    full_name: Optional[str] = Field(None, max_length=255, description="User's full name")
+    
+    @field_validator('email')
+    @classmethod
+    def validate_email(cls, v):
+        """Validate email format"""
+        import re
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, v):
+            raise ValueError("Invalid email format")
+        return v.lower()
+    
+    @field_validator('username')
+    @classmethod
+    def validate_username(cls, v):
+        """Validate username format"""
+        import re
+        if not re.match(r'^[a-zA-Z0-9_-]+$', v):
+            raise ValueError("Username must contain only letters, numbers, underscores, and hyphens")
+        return v.lower()
+
+
+class UserUpdate(BaseModel):
+    """Schema for updating a user"""
+    email: Optional[str] = Field(None, description="User email address")
+    password: Optional[str] = Field(None, min_length=8, description="New password")
+    role: Optional[UserRole] = Field(None, description="User role")
+    full_name: Optional[str] = Field(None, max_length=255, description="User's full name")
+    is_active: Optional[bool] = Field(None, description="Whether user is active")
+    
+    @field_validator('email')
+    @classmethod
+    def validate_email(cls, v):
+        """Validate email format"""
+        if v is None:
+            return v
+        import re
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, v):
+            raise ValueError("Invalid email format")
+        return v.lower()
+
+
+class UserResponse(BaseModel):
+    """Schema for user response (excludes password)"""
+    id: str
+    username: str
+    email: str
+    role: str
+    full_name: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+    last_login: Optional[datetime]
+    is_active: bool
+    
+    class Config:
+        from_attributes = True
+
+
+class UserListResponse(BaseModel):
+    """Schema for paginated user list response"""
+    users: List[UserResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
+class UserLogin(BaseModel):
+    """Schema for user login request"""
+    username: str = Field(..., description="Username")
+    password: str = Field(..., description="Password")
+
+
+class TokenResponse(BaseModel):
+    """Schema for JWT token response"""
+    access_token: str = Field(..., description="JWT access token")
+    token_type: str = Field(default="bearer", description="Token type")
+    expires_in: int = Field(..., description="Token expiration time in seconds")
+    user: UserResponse = Field(..., description="Authenticated user information")
+
+
+class PasswordChange(BaseModel):
+    """Schema for password change request"""
+    current_password: str = Field(..., description="Current password")
+    new_password: str = Field(..., min_length=8, description="New password (min 8 characters)")
+
+
+class RoleAssignment(BaseModel):
+    """Schema for role assignment"""
+    user_id: str = Field(..., description="User ID to assign role to")
+    role: UserRole = Field(..., description="New role to assign")
+
+
+# Dashboard Metrics Schemas
+
+class RecentAlert(BaseModel):
+    """Recent alert summary"""
+    id: int
+    timestamp: str
+    severity: str
+    alert_type: str
+    message: str
+    agent_id: Optional[str] = None
+    policy_id: Optional[int] = None
+
+
+class TopAgent(BaseModel):
+    """Top agent by activity"""
+    agent_id: str
+    action_count: int
+
+
+class PolicyViolation(BaseModel):
+    """Policy violation summary"""
+    policy_name: str
+    count: int
+
+
+class SystemAccess(BaseModel):
+    """System access summary"""
+    system: str
+    access_count: int
+
+
+class ActivityTimelineItem(BaseModel):
+    """Activity timeline data point"""
+    timestamp: str
+    count: int
+
+
+class RecentBlockedAction(BaseModel):
+    """Recent blocked action"""
+    id: int
+    timestamp: str
+    agent_id: str
+    action: str
+    system_accessed: str
+    policy_id: Optional[int] = None
+
+
+class DashboardMetrics(BaseModel):
+    """Dashboard metrics response"""
+    active_agents: int = Field(..., description="Number of active agents (last 24h)")
+    total_actions: int = Field(..., description="Total actions (last 30 days)")
+    blocked_actions: int = Field(..., description="Blocked actions (last 30 days)")
+    money_saved: float = Field(..., description="Money saved by blocking transactions")
+    money_spent: float = Field(..., description="Money spent on approved transactions")
+    recent_alerts: List[RecentAlert] = Field(default_factory=list, description="Recent unacknowledged alerts")
+    top_agents: List[TopAgent] = Field(default_factory=list, description="Top agents by activity (last 7 days)")
+    policy_violations: List[PolicyViolation] = Field(default_factory=list, description="Policy violations (last 7 days)")
+    systems_accessed: List[SystemAccess] = Field(default_factory=list, description="Systems accessed (last 7 days)")
+    activity_timeline: List[ActivityTimelineItem] = Field(default_factory=list, description="Hourly activity (last 24h)")
+    recent_blocked_actions: List[RecentBlockedAction] = Field(default_factory=list, description="Recent blocked actions")
+    alerts_by_severity: Dict[str, int] = Field(default_factory=dict, description="Alert counts by severity")
