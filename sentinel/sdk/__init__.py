@@ -13,6 +13,14 @@ from sentinel.sdk.retry import (
     RetryMetrics,
     get_retry_metrics
 )
+from sentinel.sdk.llm_adapter import LLMAdapter, LLMAdapterRegistry, ToolCall
+from sentinel.sdk.adapters import (
+    OpenAIAdapter,
+    AnthropicAdapter,
+    AzureOpenAIAdapter,
+    GeminiAdapter,
+    get_default_registry
+)
 
 __all__ = [
     "secure_agent",
@@ -27,5 +35,14 @@ __all__ = [
     "RetryConfig",
     "RetryError",
     "RetryMetrics",
-    "get_retry_metrics"
+    "get_retry_metrics",
+    "LLMAdapter",
+    "LLMAdapterRegistry",
+    "ToolCall",
+    "OpenAIAdapter",
+    "AnthropicAdapter",
+    "AzureOpenAIAdapter",
+    "GeminiAdapter",
+    "get_default_registry"
 ]
+
