@@ -193,8 +193,8 @@ class AuditLogResponse(BaseModel):
     decision: str
     policy_ids: List[str]
     reason: str
-    metadata: Dict[str, Any]
-    
+    metadata: Dict[str, Any] = Field(default_factory=dict, validation_alias="log_metadata")
+
     class Config:
         from_attributes = True
 
@@ -353,7 +353,7 @@ class AgentResponse(BaseModel):
     last_active: datetime
     status: str
     llm_provider: Optional[str]
-    metadata: Dict[str, Any]
+    metadata: Dict[str, Any] = Field(default_factory=dict, validation_alias="agent_metadata")
     
     class Config:
         from_attributes = True
@@ -504,13 +504,12 @@ class RoleAssignment(BaseModel):
 
 class RecentAlert(BaseModel):
     """Recent alert summary"""
-    id: int
+    id: str
     timestamp: str
     severity: str
     alert_type: str
     message: str
     agent_id: Optional[str] = None
-    policy_id: Optional[int] = None
 
 
 class TopAgent(BaseModel):
@@ -539,12 +538,11 @@ class ActivityTimelineItem(BaseModel):
 
 class RecentBlockedAction(BaseModel):
     """Recent blocked action"""
-    id: int
+    id: str
     timestamp: str
     agent_id: str
     action: str
     system_accessed: str
-    policy_id: Optional[int] = None
 
 
 class DashboardMetrics(BaseModel):

@@ -21,7 +21,7 @@ export const auditLogsApi = {
     end_date?: string;
     search?: string;
   }): Promise<AuditLogListResponse> {
-    return apiClient.get<AuditLogListResponse>('/v1/audit/logs', { params });
+    return apiClient.get<AuditLogListResponse>('/v1/audit/logs', params);
   },
 
   /**
@@ -44,9 +44,7 @@ export const auditLogsApi = {
     end_date?: string;
     limit?: number;
   }): Promise<Blob> {
-    const response = await apiClient.getBlob('/v1/audit/logs/export', {
-      params: { ...params, format: 'json' },
-    });
+    const response = await apiClient.getBlob('/v1/audit/logs/export', { ...params, format: 'json' });
     return response;
   },
 
@@ -63,9 +61,7 @@ export const auditLogsApi = {
     end_date?: string;
     limit?: number;
   }): Promise<Blob> {
-    const response = await apiClient.getBlob('/v1/audit/logs/export', {
-      params: { ...params, format: 'csv' },
-    });
+    const response = await apiClient.getBlob('/v1/audit/logs/export', { ...params, format: 'csv' });
     return response;
   },
 };

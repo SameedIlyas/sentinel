@@ -8,17 +8,24 @@ import {
   Button,
   Typography,
   Alert,
-  Container,
   InputAdornment,
   IconButton,
+  useTheme,
 } from '@mui/material';
-import { Visibility, VisibilityOff, Security } from '@mui/icons-material';
+import { Visibility, VisibilityOff } from '@mui/icons-material';
+import LightModeOutlined from '@mui/icons-material/LightModeOutlined';
+import DarkModeOutlined from '@mui/icons-material/DarkModeOutlined';
 import { useAuth } from '@/contexts/AuthContext';
+import { useThemeMode } from '@/contexts/ThemeContext';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const theme = useTheme();
+  const { mode, toggleTheme } = useThemeMode();
   const { login } = useAuth();
+
+  const dark = mode === 'dark';
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -32,124 +39,155 @@ const Login: React.FC = () => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
-
     try {
       await login({ username, password });
       navigate(from, { replace: true });
     } catch (err: any) {
-      const errorMessage =
-        err.response?.data?.detail || 'Invalid username or password';
-      setError(errorMessage);
+      setError(err.response?.data?.detail || 'Invalid username or password');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <Container maxWidth="sm">
-      <Box
+    <Box
+      sx={{
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        bgcolor: 'background.default',
+        p: 3,
+        position: 'relative',
+      }}
+    >
+      <IconButton
+        onClick={toggleTheme}
+        size="small"
         sx={{
-          minHeight: '100vh',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
+          position: 'absolute',
+          top: 20,
+          right: 20,
+          color: 'text.secondary',
+          border: `1px solid ${theme.palette.divider}`,
+          width: 34,
+          height: 34,
         }}
       >
-        <Box sx={{ mb: 4, textAlign: 'center' }}>
-          <Security sx={{ fontSize: 60, color: 'primary.main', mb: 2 }} />
-          <Typography variant="h3" component="h1" gutterBottom>
-            Sentinel AI
-          </Typography>
-          <Typography variant="h6" color="text.secondary">
-            Policy Engine Dashboard
-          </Typography>
-        </Box>
+        {dark ? <LightModeOutlined sx={{ fontSize: 16 }} /> : <DarkModeOutlined sx={{ fontSize: 16 }} />}
+      </IconButton>
 
-        <Card sx={{ width: '100%', maxWidth: 500 }}>
-          <CardContent sx={{ p: 4 }}>
-            <Typography variant="h5" component="h2" gutterBottom>
-              Sign In
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Enter your credentials to access the dashboard
-            </Typography>
-
-            {error && (
-              <Alert severity="error" sx={{ mb: 3 }}>
-                {error}
-              </Alert>
-            )}
-
-            <form onSubmit={handleSubmit}>
-              <TextField
-                fullWidth
-                label="Username"
-                variant="outlined"
-                margin="normal"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                autoComplete="username"
-                autoFocus
-                required
-                disabled={isLoading}
-              />
-
-              <TextField
-                fullWidth
-                label="Password"
-                type={showPassword ? 'text' : 'password'}
-                variant="outlined"
-                margin="normal"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
-                required
-                disabled={isLoading}
-                InputProps={{
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton
-                        aria-label="toggle password visibility"
-                        onClick={() => setShowPassword(!showPassword)}
-                        edge="end"
-                      >
-                        {showPassword ? <VisibilityOff /> : <Visibility />}
-                      </IconButton>
-                    </InputAdornment>
-                  ),
-                }}
-              />
-
-              <Button
-                type="submit"
-                fullWidth
-                variant="contained"
-                size="large"
-                sx={{ mt: 3, mb: 2 }}
-                disabled={isLoading}
-              >
-                {isLoading ? 'Signing in...' : 'Sign In'}
-              </Button>
-            </form>
-
-            <Box sx={{ mt: 3, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
-              <Typography variant="caption" color="text.secondary">
-                <strong>Default Credentials (Development):</strong>
-                <br />
-                Username: admin
-                <br />
-                Password: admin123
-              </Typography>
-            </Box>
-          </CardContent>
-        </Card>
-
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 3 }}>
-          Sentinel AI Policy Engine v1.0.0
-        </Typography>
+      <Box sx={{ mb: 4.5, textAlign: 'center' }}>
+        <Box
+          component="img"
+          src="/sentinel.png"
+          alt="Sentinel Governance AI"
+          sx={{
+            height: 120,
+            width: 'auto',
+            objectFit: 'contain',
+            mx: 'auto',
+            display: 'block',
+          }}
+        />
       </Box>
-    </Container>
+
+      <Card sx={{ width: '100%', maxWidth: 400 }}>
+        <CardContent sx={{ p: 3.5 }}>
+          <Typography variant="h5" sx={{ fontWeight: 600, mb: 0.25, color: 'text.primary' }}>
+            Sign in
+          </Typography>
+          <Typography sx={{ color: 'text.secondary', mb: 3, fontSize: '0.8125rem' }}>
+            Enter your credentials to continue
+          </Typography>
+
+          {error && (
+            <Alert severity="error" sx={{ mb: 2.5 }}>{error}</Alert>
+          )}
+
+          <form onSubmit={handleSubmit}>
+            <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: 'text.secondary', mb: 0.5 }}>
+              Username
+            </Typography>
+            <TextField
+              fullWidth
+              variant="outlined"
+              size="small"
+              placeholder="Enter your username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoComplete="username"
+              autoFocus
+              required
+              disabled={isLoading}
+              sx={{ mb: 2 }}
+            />
+
+            <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: 'text.secondary', mb: 0.5 }}>
+              Password
+            </Typography>
+            <TextField
+              fullWidth
+              type={showPassword ? 'text' : 'password'}
+              variant="outlined"
+              size="small"
+              placeholder="Enter your password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+              disabled={isLoading}
+              sx={{ mb: 3 }}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      onClick={() => setShowPassword(!showPassword)}
+                      edge="end"
+                      size="small"
+                      sx={{ color: 'text.secondary' }}
+                    >
+                      {showPassword ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
+
+            <Button
+              type="submit"
+              fullWidth
+              variant="contained"
+              disabled={isLoading}
+              sx={{ py: 1, fontWeight: 600 }}
+            >
+              {isLoading ? 'Signing in...' : 'Sign in'}
+            </Button>
+          </form>
+
+          <Box
+            sx={{
+              mt: 2.5,
+              p: 1.75,
+              borderRadius: '6px',
+              bgcolor: dark ? 'rgba(255,255,255,0.025)' : 'rgba(0,0,0,0.02)',
+              border: `1px solid ${theme.palette.divider}`,
+            }}
+          >
+            <Typography sx={{ color: 'text.secondary', fontSize: '0.6875rem' }}>
+              <span style={{ fontWeight: 600, color: theme.palette.text.primary }}>Dev credentials</span>
+              <br />
+              admin / admin123
+            </Typography>
+          </Box>
+        </CardContent>
+      </Card>
+
+      <Typography sx={{ mt: 3.5, color: 'text.secondary', fontSize: '0.6875rem', opacity: 0.5 }}>
+        Sentinel AI v1.0.0
+      </Typography>
+    </Box>
   );
 };
 

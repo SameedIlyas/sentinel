@@ -31,8 +31,8 @@ export interface TokenResponse {
 
 // Agent Types
 export interface Agent {
-  id: number;
-  agent_id: string;
+  id: string;
+  agent_id?: string;
   name: string;
   description?: string;
   status: 'active' | 'inactive' | 'suspended';

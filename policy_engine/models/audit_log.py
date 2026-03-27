@@ -47,4 +47,4 @@ class AuditLog(Base):
     decision = Column(Enum(Decision), nullable=False, index=True)
     policy_ids = Column(JSON, nullable=False)  # List of policy IDs
     reason = Column(String, nullable=False)
-    metadata = Column(JSON, default=dict, nullable=False)
+    log_metadata = Column('metadata', JSON, default=dict, nullable=False)

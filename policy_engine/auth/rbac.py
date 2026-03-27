@@ -1,39 +1,37 @@
 """RBAC middleware and permission decorators"""
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-from typing import Callable, List
+from typing import Callable, List, Optional
+import hashlib
 
 from policy_engine.database import get_db
 from policy_engine.models.user import User, UserRole, has_permission
 from policy_engine.auth.jwt_utils import decode_access_token
+from policy_engine.config import settings
 
 
 # HTTP Bearer token security scheme
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: Session = Depends(get_db)
 ) -> User:
     """
     Get the current authenticated user from JWT token
-    
-    Args:
-        credentials: HTTP Authorization header credentials
-        db: Database session
-        
-    Returns:
-        Authenticated user object
-        
-    Raises:
-        HTTPException: If token is invalid or user not found
     """
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
     token = credentials.credentials
     
-    # Decode JWT token
     payload = decode_access_token(token)
     if payload is None:
         raise HTTPException(
@@ -50,7 +48,6 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # Get user from database
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
         raise HTTPException(
@@ -59,7 +56,6 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # Check if user is active
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -67,6 +63,42 @@ def get_current_user(
         )
     
     return user
+
+
+def authenticate_request(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    db: Session = Depends(get_db)
+) -> str:
+    """
+    Flexible auth: accepts either JWT bearer token or X-API-Key header.
+    Returns an identifier string (user_id or agent_id).
+    """
+    # Try JWT bearer token first
+    if credentials is not None:
+        payload = decode_access_token(credentials.credentials)
+        if payload and payload.get("user_id"):
+            user = db.query(User).filter(User.id == payload["user_id"]).first()
+            if user and user.is_active:
+                return user.id
+
+    # Try API key
+    api_key = request.headers.get(settings.API_KEY_HEADER)
+    if api_key:
+        from policy_engine.models.api_key import APIKey
+        from datetime import datetime
+        key_hash = hashlib.sha256(api_key.encode()).hexdigest()
+        api_key_record = db.query(APIKey).filter(APIKey.key == key_hash).first()
+        if api_key_record and api_key_record.is_active:
+            if not api_key_record.expires_at or api_key_record.expires_at >= datetime.utcnow():
+                api_key_record.last_used = datetime.utcnow()
+                db.commit()
+                return api_key_record.agent_id
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated. Provide a Bearer token or X-API-Key header.",
+    )
 
 
 def require_role(allowed_roles: List[UserRole]) -> Callable:

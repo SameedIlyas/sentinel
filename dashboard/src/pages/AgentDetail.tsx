@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -10,9 +10,6 @@ import {
   CircularProgress,
   Alert,
   Divider,
-  List,
-  ListItem,
-  ListItemText,
   IconButton,
   Table,
   TableBody,
@@ -20,13 +17,13 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  useTheme,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import {
   ArrowBack as ArrowBackIcon,
-  SmartToy as AgentIcon,
   Block as BlockIcon,
   CheckCircle as AllowIcon,
-  FiberManualRecord as StatusIcon,
   Timeline as TimelineIcon,
   Storage as SystemIcon,
   Warning as ViolationIcon,
@@ -35,15 +32,176 @@ import { format, formatDistanceToNow } from 'date-fns';
 import agentsApi from '@/api/agents';
 import apiClient from '@/api/client';
 import { Agent, AgentActivityMetrics, AuditLog } from '@/types';
+import { useAppStyles } from '@/hooks/useAppStyles';
+
+function useSurfaceCardSx() {
+  const styles = useAppStyles();
+  return useMemo(
+    () => ({
+      bgcolor: 'background.paper' as const,
+      border: `1px solid ${styles.theme.palette.divider}`,
+      borderRadius: 2,
+      boxShadow: styles.dark ? 'none' : '0 1px 3px rgba(0,0,0,0.08)',
+    }),
+    [styles.dark, styles.theme.palette.divider]
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const theme = useTheme();
+  const c =
+    status === 'active'
+      ? theme.palette.success.main
+      : status === 'suspended'
+        ? theme.palette.error.main
+        : theme.palette.text.secondary;
+
+  return (
+    <Box
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 1,
+        px: 1.5,
+        py: 0.75,
+        borderRadius: 999,
+        bgcolor: alpha(c, 0.12),
+        border: `1px solid ${alpha(c, 0.35)}`,
+      }}
+    >
+      <Box
+        component="span"
+        sx={{
+          width: 8,
+          height: 8,
+          borderRadius: '50%',
+          bgcolor: c,
+          boxShadow: `0 0 0 2px ${alpha(c, 0.25)}`,
+        }}
+      />
+      <Typography
+        component="span"
+        sx={{
+          color: c,
+          fontWeight: 600,
+          fontSize: '0.75rem',
+          letterSpacing: '0.06em',
+        }}
+      >
+        {status.toUpperCase()}
+      </Typography>
+    </Box>
+  );
+}
+
+function InfoCard({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  const surfaceCardSx = useSurfaceCardSx();
+
+  return (
+    <Card sx={surfaceCardSx}>
+      <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+        <Typography
+          variant="caption"
+          sx={{
+            color: 'text.secondary',
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            fontWeight: 600,
+          }}
+        >
+          {label}
+        </Typography>
+        <Box sx={{ mt: 1 }}>{children}</Box>
+      </CardContent>
+    </Card>
+  );
+}
 
 const AgentDetail: React.FC = () => {
   const { agentId } = useParams<{ agentId: string }>();
   const navigate = useNavigate();
+  const theme = useTheme();
+  const styles = useAppStyles();
+  const surfaceCardSx = useSurfaceCardSx();
+  const { dark } = styles;
+
   const [agent, setAgent] = useState<Agent | null>(null);
   const [metrics, setMetrics] = useState<AgentActivityMetrics | null>(null);
   const [recentActivity, setRecentActivity] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const tableSx = useMemo(
+    () => ({
+      '& .MuiTableCell-root': {
+        fontSize: '0.8rem',
+        borderColor: theme.palette.divider,
+        color: 'text.primary',
+      },
+      '& .MuiTableHead-root .MuiTableCell-root': {
+        fontWeight: 600,
+        color: 'text.secondary',
+        borderBottom: `1px solid ${theme.palette.divider}`,
+      },
+      '& .MuiTableBody-root .MuiTableRow-root:last-of-type .MuiTableCell-root': {
+        borderBottom: 'none',
+      },
+    }),
+    [theme.palette.divider]
+  );
+
+  const headerIconButtonSx = useMemo(
+    () => ({
+      color: 'text.primary',
+      border: `1px solid ${theme.palette.divider}`,
+      borderRadius: 1.5,
+      bgcolor: 'background.paper',
+      '&:hover': { bgcolor: styles.hoverBg },
+    }),
+    [theme.palette.divider, styles.hoverBg]
+  );
+
+  const pageTitleSx = {
+    fontWeight: 700,
+    letterSpacing: '-0.02em',
+    color: 'text.primary',
+  };
+
+  const decisionChipSx = (decision: string) => {
+    const d = decision.toLowerCase();
+    if (d === 'allowed' || d === 'approved') {
+      const c = theme.palette.success.main;
+      return { bgcolor: alpha(c, 0.15), color: c, border: `1px solid ${alpha(c, 0.35)}` };
+    }
+    if (d === 'blocked') {
+      const c = theme.palette.error.main;
+      return { bgcolor: alpha(c, 0.12), color: c, border: `1px solid ${alpha(c, 0.35)}` };
+    }
+    const c = theme.palette.warning.main;
+    return { bgcolor: alpha(c, 0.12), color: c, border: `1px solid ${alpha(c, 0.35)}` };
+  };
+
+  const getDecisionIcon = (decision: string) => {
+    switch (decision.toLowerCase()) {
+      case 'allowed':
+      case 'approved':
+        return <AllowIcon sx={{ color: 'success.main', fontSize: 18 }} />;
+      case 'blocked':
+        return <BlockIcon sx={{ color: 'error.main', fontSize: 18 }} />;
+      default:
+        return null;
+    }
+  };
+
+  const chipBorder = `1px solid ${theme.palette.divider}`;
+  const mutedCellColor = dark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)';
+  const userCellColor = dark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.55)';
 
   useEffect(() => {
     if (agentId) {
@@ -58,7 +216,6 @@ const AgentDetail: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      // Fetch agent details and metrics in parallel
       const [agentData, metricsData] = await Promise.all([
         agentsApi.getAgent(agentId),
         agentsApi.getAgentMetrics(agentId),
@@ -67,7 +224,6 @@ const AgentDetail: React.FC = () => {
       setAgent(agentData);
       setMetrics(metricsData);
 
-      // Fetch recent activity (audit logs)
       const activityResponse = await apiClient.get<{ logs: AuditLog[]; total: number }>(
         '/v1/audit/logs',
         {
@@ -86,63 +242,44 @@ const AgentDetail: React.FC = () => {
     }
   };
 
-  const getStatusColor = (status: string): 'success' | 'default' | 'error' => {
-    switch (status) {
-      case 'active':
-        return 'success';
-      case 'inactive':
-        return 'default';
-      case 'suspended':
-        return 'error';
-      default:
-        return 'default';
-    }
-  };
-
-  const getDecisionIcon = (decision: string) => {
-    switch (decision.toLowerCase()) {
-      case 'allowed':
-      case 'approved':
-        return <AllowIcon sx={{ color: 'success.main', fontSize: 18 }} />;
-      case 'blocked':
-        return <BlockIcon sx={{ color: 'error.main', fontSize: 18 }} />;
-      default:
-        return null;
-    }
-  };
-
-  const getDecisionColor = (decision: string): 'success' | 'error' | 'warning' => {
-    switch (decision.toLowerCase()) {
-      case 'allowed':
-      case 'approved':
-        return 'success';
-      case 'blocked':
-        return 'error';
-      default:
-        return 'warning';
-    }
-  };
-
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <CircularProgress size={60} />
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: '60vh',
+          bgcolor: 'background.default',
+        }}
+      >
+        <CircularProgress size={60} sx={{ color: 'primary.main' }} />
       </Box>
     );
   }
 
   if (error || !agent || !metrics) {
     return (
-      <Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-          <IconButton onClick={() => navigate('/agents')} sx={{ mr: 2 }}>
+      <Box sx={{ bgcolor: 'background.default', minHeight: '100%', color: 'text.primary', pb: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+          <IconButton onClick={() => navigate('/agents')} sx={headerIconButtonSx} aria-label="Back to agents">
             <ArrowBackIcon />
           </IconButton>
-          <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+          <Typography variant="h4" sx={pageTitleSx}>
             Agent Details
           </Typography>
         </Box>
-        <Alert severity="error">{error || 'Agent not found'}</Alert>
+        <Alert
+          severity="error"
+          sx={{
+            bgcolor: alpha(theme.palette.error.main, 0.12),
+            color: 'text.primary',
+            border: `1px solid ${alpha(theme.palette.error.main, 0.35)}`,
+            '& .MuiAlert-icon': { color: theme.palette.error.main },
+          }}
+        >
+          {error || 'Agent not found'}
+        </Alert>
       </Box>
     );
   }
@@ -151,121 +288,128 @@ const AgentDetail: React.FC = () => {
     (log) => log.decision === 'blocked'
   );
 
+  const primaryMain = theme.palette.primary.main;
+  const errorMain = theme.palette.error.main;
+
   return (
-    <Box>
-      {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-        <IconButton onClick={() => navigate('/agents')} sx={{ mr: 2 }}>
+    <Box sx={{ bgcolor: 'background.default', minHeight: '100%', color: 'text.primary', pb: 4 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3, flexWrap: 'wrap' }}>
+        <IconButton onClick={() => navigate('/agents')} sx={headerIconButtonSx} aria-label="Back to agents">
           <ArrowBackIcon />
         </IconButton>
-        <Box sx={{ flex: 1 }}>
-          <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+        <Box sx={{ flex: 1, minWidth: 200 }}>
+          <Typography variant="h4" sx={pageTitleSx}>
             {agent.name}
           </Typography>
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            sx={{ fontFamily: 'monospace', mt: 0.5 }}
-          >
-            {agent.agent_id}
-          </Typography>
         </Box>
-        <Chip
-          icon={<StatusIcon sx={{ fontSize: 12 }} />}
-          label={agent.status.toUpperCase()}
-          color={getStatusColor(agent.status)}
-        />
+        <StatusBadge status={agent.status} />
       </Box>
 
-      <Grid container spacing={3}>
-        {/* Agent Metadata */}
-        <Grid item xs={12} md={4}>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <AgentIcon sx={{ mr: 1, color: 'primary.main' }} />
-                <Typography variant="h6">Agent Information</Typography>
-              </Box>
-              <Divider sx={{ mb: 2 }} />
-              <List dense>
-                <ListItem>
-                  <ListItemText
-                    primary="Status"
-                    secondary={
-                      <Chip
-                        label={agent.status.toUpperCase()}
-                        color={getStatusColor(agent.status)}
-                        size="small"
-                      />
-                    }
-                  />
-                </ListItem>
-                {agent.description && (
-                  <ListItem>
-                    <ListItemText primary="Description" secondary={agent.description} />
-                  </ListItem>
-                )}
-                <ListItem>
-                  <ListItemText
-                    primary="First Seen"
-                    secondary={format(new Date(metrics.first_seen), 'MMM dd, yyyy HH:mm')}
-                  />
-                </ListItem>
-                <ListItem>
-                  <ListItemText
-                    primary="Last Active"
-                    secondary={
-                      metrics.last_active
-                        ? `${format(new Date(metrics.last_active), 'MMM dd, yyyy HH:mm')} (${formatDistanceToNow(new Date(metrics.last_active), { addSuffix: true })})`
-                        : 'Never'
-                    }
-                  />
-                </ListItem>
-                <ListItem>
-                  <ListItemText
-                    primary="Created"
-                    secondary={format(new Date(agent.created_at), 'MMM dd, yyyy HH:mm')}
-                  />
-                </ListItem>
-              </List>
-            </CardContent>
-          </Card>
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid item xs={12} sm={6} md={4}>
+          <InfoCard label="Agent ID">
+            <Typography
+              sx={{ fontFamily: styles.mono, fontSize: '0.85rem', color: 'text.primary', wordBreak: 'break-all' }}
+            >
+              {agent.agent_id || agent.id}
+            </Typography>
+          </InfoCard>
         </Grid>
+        <Grid item xs={12} sm={6} md={4}>
+          <InfoCard label="Status">
+            <StatusBadge status={agent.status} />
+          </InfoCard>
+        </Grid>
+        <Grid item xs={12} sm={6} md={4}>
+          <InfoCard label="First seen">
+            <Typography sx={{ fontSize: '0.9rem' }}>
+              {format(new Date(metrics.first_seen), 'MMM dd, yyyy HH:mm')}
+            </Typography>
+          </InfoCard>
+        </Grid>
+        <Grid item xs={12} sm={6} md={4}>
+          <InfoCard label="Last active">
+            <Typography sx={{ fontSize: '0.9rem' }}>
+              {metrics.last_active
+                ? `${format(new Date(metrics.last_active), 'MMM dd, yyyy HH:mm')} (${formatDistanceToNow(new Date(metrics.last_active), { addSuffix: true })})`
+                : 'Never'}
+            </Typography>
+          </InfoCard>
+        </Grid>
+        <Grid item xs={12} sm={6} md={4}>
+          <InfoCard label="Created">
+            <Typography sx={{ fontSize: '0.9rem' }}>
+              {format(new Date(agent.created_at), 'MMM dd, yyyy HH:mm')}
+            </Typography>
+          </InfoCard>
+        </Grid>
+        {agent.description && (
+          <Grid item xs={12}>
+            <InfoCard label="Description">
+              <Typography sx={{ fontSize: '0.9rem', color: 'text.secondary' }}>{agent.description}</Typography>
+            </InfoCard>
+          </Grid>
+        )}
+      </Grid>
 
-        {/* Activity Metrics */}
-        <Grid item xs={12} md={8}>
+      <Grid container spacing={2}>
+        <Grid item xs={12}>
           <Grid container spacing={2}>
             <Grid item xs={12} sm={6} md={4}>
-              <Card>
-                <CardContent>
-                  <Typography color="text.secondary" variant="body2">
-                    Total Actions
+              <Card sx={surfaceCardSx}>
+                <CardContent sx={{ p: 2 }}>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: 'text.secondary',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                      fontWeight: 600,
+                    }}
+                  >
+                    Total actions
                   </Typography>
-                  <Typography variant="h4" sx={{ fontWeight: 'bold', my: 1 }}>
+                  <Typography variant="h4" sx={{ fontWeight: 700, my: 1, color: 'text.primary', letterSpacing: '-0.02em' }}>
                     {metrics.total_actions.toLocaleString()}
                   </Typography>
                 </CardContent>
               </Card>
             </Grid>
             <Grid item xs={12} sm={6} md={4}>
-              <Card>
-                <CardContent>
-                  <Typography color="text.secondary" variant="body2">
-                    Allowed Actions
+              <Card sx={surfaceCardSx}>
+                <CardContent sx={{ p: 2 }}>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: 'text.secondary',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                      fontWeight: 600,
+                    }}
+                  >
+                    Allowed actions
                   </Typography>
-                  <Typography variant="h4" sx={{ fontWeight: 'bold', my: 1, color: 'success.main' }}>
+                  <Typography variant="h4" sx={{ fontWeight: 700, my: 1, color: 'success.main', letterSpacing: '-0.02em' }}>
                     {metrics.allowed_actions.toLocaleString()}
                   </Typography>
                 </CardContent>
               </Card>
             </Grid>
             <Grid item xs={12} sm={6} md={4}>
-              <Card>
-                <CardContent>
-                  <Typography color="text.secondary" variant="body2">
-                    Blocked Actions
+              <Card sx={surfaceCardSx}>
+                <CardContent sx={{ p: 2 }}>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: 'text.secondary',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                      fontWeight: 600,
+                    }}
+                  >
+                    Blocked actions
                   </Typography>
-                  <Typography variant="h4" sx={{ fontWeight: 'bold', my: 1, color: 'error.main' }}>
+                  <Typography variant="h4" sx={{ fontWeight: 700, my: 1, color: 'error.main', letterSpacing: '-0.02em' }}>
                     {metrics.blocked_actions.toLocaleString()}
                   </Typography>
                 </CardContent>
@@ -273,22 +417,34 @@ const AgentDetail: React.FC = () => {
             </Grid>
           </Grid>
 
-          {/* Systems Accessed */}
-          <Card sx={{ mt: 2 }}>
-            <CardContent>
+          <Card sx={{ ...surfaceCardSx, mt: 2 }}>
+            <CardContent sx={{ p: 2 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <SystemIcon sx={{ mr: 1, color: 'info.main' }} />
-                <Typography variant="h6">Systems Accessed</Typography>
+                <SystemIcon sx={{ mr: 1, color: primaryMain }} />
+                <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary' }}>
+                  Systems accessed
+                </Typography>
               </Box>
-              <Divider sx={{ mb: 2 }} />
+              <Divider sx={{ mb: 2, borderColor: theme.palette.divider }} />
               {metrics.systems_accessed && metrics.systems_accessed.length > 0 ? (
                 <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                   {metrics.systems_accessed.map((system, idx) => (
-                    <Chip key={idx} label={system} variant="outlined" />
+                    <Chip
+                      key={idx}
+                      label={system}
+                      size="small"
+                      sx={{
+                        fontFamily: styles.mono,
+                        fontSize: '0.75rem',
+                        bgcolor: alpha(primaryMain, 0.1),
+                        color: 'text.primary',
+                        border: `1px solid ${alpha(primaryMain, 0.25)}`,
+                      }}
+                    />
                   ))}
                 </Box>
               ) : (
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                   No systems accessed yet
                 </Typography>
               )}
@@ -296,24 +452,29 @@ const AgentDetail: React.FC = () => {
           </Card>
         </Grid>
 
-        {/* Policy Violations */}
         {blockedActions.length > 0 && (
           <Grid item xs={12}>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                  <ViolationIcon sx={{ mr: 1, color: 'error.main' }} />
-                  <Typography variant="h6">Recent Policy Violations</Typography>
+            <Card sx={surfaceCardSx}>
+              <CardContent sx={{ p: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+                  <ViolationIcon sx={{ color: 'error.main' }} />
+                  <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary' }}>
+                    Recent policy violations
+                  </Typography>
                   <Chip
                     label={blockedActions.length}
                     size="small"
-                    color="error"
-                    sx={{ ml: 1 }}
+                    sx={{
+                      bgcolor: alpha(errorMain, 0.15),
+                      color: errorMain,
+                      border: `1px solid ${alpha(errorMain, 0.35)}`,
+                      fontWeight: 600,
+                    }}
                   />
                 </Box>
-                <Divider sx={{ mb: 2 }} />
+                <Divider sx={{ mb: 2, borderColor: theme.palette.divider }} />
                 <TableContainer>
-                  <Table size="small">
+                  <Table size="small" sx={tableSx}>
                     <TableHead>
                       <TableRow>
                         <TableCell>Timestamp</TableCell>
@@ -324,22 +485,32 @@ const AgentDetail: React.FC = () => {
                     </TableHead>
                     <TableBody>
                       {blockedActions.slice(0, 10).map((log) => (
-                        <TableRow key={log.id}>
+                        <TableRow key={log.id} sx={{ '&:hover': { bgcolor: styles.hoverBg } }}>
                           <TableCell>
-                            <Typography variant="body2">
+                            <Typography sx={{ fontSize: '0.8rem' }}>
                               {format(new Date(log.timestamp), 'MMM dd, HH:mm:ss')}
                             </Typography>
                           </TableCell>
                           <TableCell>
-                            <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                            <Typography sx={{ fontFamily: styles.mono, fontSize: '0.8rem' }}>
                               {log.tool_name || 'N/A'}
                             </Typography>
                           </TableCell>
                           <TableCell>
-                            <Chip label={log.system_accessed} size="small" variant="outlined" />
+                            <Chip
+                              label={log.system_accessed}
+                              size="small"
+                              sx={{
+                                fontSize: '0.7rem',
+                                fontFamily: styles.mono,
+                                bgcolor: styles.surfaceBg,
+                                color: 'text.primary',
+                                border: chipBorder,
+                              }}
+                            />
                           </TableCell>
                           <TableCell>
-                            <Typography variant="caption" color="text.secondary">
+                            <Typography sx={{ fontSize: '0.75rem', color: mutedCellColor }}>
                               {log.reason || 'Policy violation'}
                             </Typography>
                           </TableCell>
@@ -353,21 +524,22 @@ const AgentDetail: React.FC = () => {
           </Grid>
         )}
 
-        {/* Activity Timeline */}
         <Grid item xs={12}>
-          <Card>
-            <CardContent>
+          <Card sx={surfaceCardSx}>
+            <CardContent sx={{ p: 2 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <TimelineIcon sx={{ mr: 1, color: 'primary.main' }} />
-                <Typography variant="h6">Recent Activity</Typography>
+                <TimelineIcon sx={{ mr: 1, color: primaryMain }} />
+                <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary' }}>
+                  Recent activity
+                </Typography>
               </Box>
-              <Divider sx={{ mb: 2 }} />
+              <Divider sx={{ mb: 2, borderColor: theme.palette.divider }} />
               {recentActivity.length > 0 ? (
                 <TableContainer>
-                  <Table>
+                  <Table sx={tableSx}>
                     <TableHead>
                       <TableRow>
-                        <TableCell width="40px"></TableCell>
+                        <TableCell width="40px" />
                         <TableCell>Timestamp</TableCell>
                         <TableCell>Action</TableCell>
                         <TableCell>System</TableCell>
@@ -377,33 +549,45 @@ const AgentDetail: React.FC = () => {
                     </TableHead>
                     <TableBody>
                       {recentActivity.map((log) => (
-                        <TableRow key={log.id}>
+                        <TableRow key={log.id} sx={{ '&:hover': { bgcolor: styles.hoverBg } }}>
                           <TableCell>{getDecisionIcon(log.decision)}</TableCell>
                           <TableCell>
-                            <Typography variant="body2">
+                            <Typography sx={{ fontSize: '0.8rem' }}>
                               {format(new Date(log.timestamp), 'MMM dd, yyyy HH:mm:ss')}
                             </Typography>
-                            <Typography variant="caption" color="text.secondary">
+                            <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', display: 'block' }}>
                               {formatDistanceToNow(new Date(log.timestamp), { addSuffix: true })}
                             </Typography>
                           </TableCell>
                           <TableCell>
-                            <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                            <Typography sx={{ fontFamily: styles.mono, fontSize: '0.8rem' }}>
                               {log.tool_name || 'N/A'}
                             </Typography>
                           </TableCell>
                           <TableCell>
-                            <Chip label={log.system_accessed} size="small" variant="outlined" />
-                          </TableCell>
-                          <TableCell>
                             <Chip
-                              label={log.decision.toUpperCase()}
-                              color={getDecisionColor(log.decision)}
+                              label={log.system_accessed}
                               size="small"
+                              sx={{
+                                fontSize: '0.7rem',
+                                fontFamily: styles.mono,
+                                bgcolor: styles.surfaceBg,
+                                color: 'text.primary',
+                                border: chipBorder,
+                              }}
                             />
                           </TableCell>
                           <TableCell>
-                            <Typography variant="body2" color="text.secondary">
+                            <Chip label={log.decision.toUpperCase()} size="small" sx={decisionChipSx(log.decision)} />
+                          </TableCell>
+                          <TableCell>
+                            <Typography
+                              sx={{
+                                fontSize: '0.8rem',
+                                color: userCellColor,
+                                fontFamily: log.user_id ? styles.mono : 'inherit',
+                              }}
+                            >
                               {log.user_id || 'N/A'}
                             </Typography>
                           </TableCell>
@@ -413,7 +597,7 @@ const AgentDetail: React.FC = () => {
                   </Table>
                 </TableContainer>
               ) : (
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                   No recent activity
                 </Typography>
               )}

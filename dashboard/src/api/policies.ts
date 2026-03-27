@@ -16,7 +16,7 @@ export const policiesApi = {
     page?: number;
     page_size?: number;
   }): Promise<PolicyListResponse> {
-    return apiClient.get<PolicyListResponse>('/v1/policies', { params });
+    return apiClient.get<PolicyListResponse>('/v1/policies', params);
   },
 
   /**

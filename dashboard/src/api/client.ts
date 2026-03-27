@@ -3,6 +3,19 @@ import { LoginRequest, TokenResponse, User } from '@/types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
+function formatApiDetail(detail: unknown): string {
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((d: any) => (typeof d === 'object' && d.msg ? d.msg : JSON.stringify(d)))
+      .join('; ');
+  }
+  if (typeof detail === 'object' && detail !== null) {
+    return JSON.stringify(detail);
+  }
+  return String(detail);
+}
+
 class ApiClient {
   private client: AxiosInstance;
   private tokenRefreshPromise: Promise<string> | null = null;
@@ -49,6 +62,13 @@ class ApiClient {
             this.clearAuth();
             window.location.href = '/login';
             return Promise.reject(refreshError);
+          }
+        }
+
+        if (error.response?.data && typeof error.response.data === 'object') {
+          const data = error.response.data as Record<string, unknown>;
+          if (data.detail && typeof data.detail !== 'string') {
+            data.detail = formatApiDetail(data.detail);
           }
         }
 

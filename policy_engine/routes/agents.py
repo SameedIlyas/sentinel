@@ -7,7 +7,7 @@ from datetime import datetime
 import math
 
 from policy_engine.database import get_db
-from policy_engine.auth.api_key import get_current_agent
+from policy_engine.auth.rbac import authenticate_request
 from policy_engine.models.agent import Agent, AgentStatus
 from policy_engine.models.schemas import (
     AgentResponse,
@@ -24,7 +24,7 @@ router = APIRouter()
 
 @router.get("", response_model=AgentListResponse)
 async def list_agents(
-    agent_id: str = Depends(get_current_agent),
+    auth_id: str = Depends(authenticate_request),
     status_filter: Optional[str] = Query(None, description="Filter by status (active/inactive/suspended)"),
     owner_user_id: Optional[str] = Query(None, description="Filter by owner user ID"),
     search: Optional[str] = Query(None, description="Search by agent name or ID"),
@@ -96,7 +96,7 @@ async def list_agents(
 @router.get("/{agent_id_param}", response_model=AgentResponse)
 async def get_agent(
     agent_id_param: str,
-    agent_id: str = Depends(get_current_agent),
+    auth_id: str = Depends(authenticate_request),
     db: Session = Depends(get_db)
 ):
     """
@@ -131,7 +131,7 @@ async def get_agent(
 async def update_agent(
     agent_id_param: str,
     update_data: AgentUpdate,
-    agent_id: str = Depends(get_current_agent),
+    auth_id: str = Depends(authenticate_request),
     db: Session = Depends(get_db)
 ):
     """
@@ -175,7 +175,7 @@ async def update_agent(
 @router.get("/{agent_id_param}/metrics", response_model=AgentActivityMetrics)
 async def get_agent_metrics(
     agent_id_param: str,
-    agent_id: str = Depends(get_current_agent),
+    auth_id: str = Depends(authenticate_request),
     db: Session = Depends(get_db)
 ):
     """
@@ -211,7 +211,7 @@ async def get_agent_metrics(
 
 @router.get("/metrics/all", response_model=AgentMetricsResponse)
 async def get_all_agent_metrics(
-    agent_id: str = Depends(get_current_agent),
+    auth_id: str = Depends(authenticate_request),
     db: Session = Depends(get_db)
 ):
     """

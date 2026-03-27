@@ -39,4 +39,4 @@ class Agent(Base):
     last_active = Column(DateTime, default=datetime.utcnow, nullable=False)
     status = Column(Enum(AgentStatus), default=AgentStatus.ACTIVE, nullable=False)
     llm_provider = Column(String, nullable=True)
-    metadata = Column(JSON, default=dict, nullable=False)
+    agent_metadata = Column('metadata', JSON, default=dict, nullable=False)

@@ -11,7 +11,7 @@ from policy_engine.config import settings
 from policy_engine.middleware.logging import LoggingMiddleware
 from policy_engine.middleware.error_handler import ErrorHandlerMiddleware
 from policy_engine.middleware.rate_limiter import RateLimitMiddleware
-from policy_engine.routes import health, agents, policies, policy_check, audit, alerts, auth, users, dashboard, websocket
+from policy_engine.routes import health, agents, policies, policy_check, audit, alerts, auth, users, dashboard, websocket, cache
 
 # Configure logging
 logging.basicConfig(
@@ -41,19 +41,20 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configure CORS
+# Add custom middleware (added first = runs innermost)
+app.add_middleware(RateLimitMiddleware)
+app.add_middleware(ErrorHandlerMiddleware)
+app.add_middleware(LoggingMiddleware)
+
+# CORS must be added LAST so it runs as the outermost middleware,
+# ensuring CORS headers are present on ALL responses including errors.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Add custom middleware
-app.add_middleware(LoggingMiddleware)
-app.add_middleware(ErrorHandlerMiddleware)
-app.add_middleware(RateLimitMiddleware)
 
 # Include routers
 app.include_router(health.router, tags=["health"])
@@ -66,6 +67,7 @@ app.include_router(policies.router, prefix="/v1/policies", tags=["policies"])
 app.include_router(policy_check.router, prefix="/v1/policy", tags=["policy-evaluation"])
 app.include_router(audit.router, prefix="/v1/audit", tags=["audit"])
 app.include_router(alerts.router, prefix="/v1/alerts", tags=["alerts"])
+app.include_router(cache.router, prefix="/v1/cache", tags=["cache"])
 
 
 @app.get("/")

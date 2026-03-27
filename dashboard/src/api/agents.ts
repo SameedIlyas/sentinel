@@ -16,7 +16,7 @@ export const agentsApi = {
     page?: number;
     page_size?: number;
   }): Promise<AgentListResponse> {
-    return apiClient.get<AgentListResponse>('/v1/agents', { params });
+    return apiClient.get<AgentListResponse>('/v1/agents', params);
   },
 
   /**

@@ -12,7 +12,7 @@ import io
 import json
 
 from policy_engine.database import get_db
-from policy_engine.auth.api_key import get_current_agent
+from policy_engine.auth.rbac import authenticate_request
 from policy_engine.models.audit_log import AuditLog, Decision
 from policy_engine.models.schemas import (
     AuditLogCreate,
@@ -28,7 +28,7 @@ router = APIRouter()
 @router.post("/log", response_model=AuditLogResponse, status_code=status.HTTP_201_CREATED)
 async def create_audit_log(
     log_data: AuditLogCreate,
-    agent_id: str = Depends(get_current_agent),
+    auth_id: str = Depends(authenticate_request),
     db: Session = Depends(get_db)
 ):
     """
@@ -48,11 +48,11 @@ async def create_audit_log(
     Raises:
         HTTPException: If creation fails
     """
-    # Ensure the agent_id in request matches authenticated agent
-    if log_data.agent_id != agent_id:
+    # For API-key authenticated agents, ensure the agent_id in request matches
+    if log_data.agent_id != auth_id and not auth_id.startswith("user_"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Agent ID in request ({log_data.agent_id}) does not match authenticated agent ({agent_id})"
+            detail=f"Agent ID in request ({log_data.agent_id}) does not match authenticated agent ({auth_id})"
         )
     
     # Generate unique ID
@@ -92,7 +92,7 @@ async def create_audit_log(
 
 @router.get("/logs", response_model=AuditLogListResponse)
 async def get_audit_logs(
-    agent_id: str = Depends(get_current_agent),
+    auth_id: str = Depends(authenticate_request),
     db: Session = Depends(get_db),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
@@ -208,7 +208,7 @@ async def get_audit_logs(
 @router.get("/logs/export")
 async def export_audit_logs(
     format: Literal["json", "csv"] = Query("json", description="Export format"),
-    agent_id: str = Depends(get_current_agent),
+    auth_id: str = Depends(authenticate_request),
     db: Session = Depends(get_db),
     filter_agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
     filter_user_id: Optional[str] = Query(None, description="Filter by user ID"),
@@ -370,7 +370,7 @@ async def export_audit_logs(
 @router.get("/logs/{log_id}", response_model=AuditLogResponse)
 async def get_audit_log(
     log_id: str,
-    agent_id: str = Depends(get_current_agent),
+    auth_id: str = Depends(authenticate_request),
     db: Session = Depends(get_db)
 ):
     """
@@ -400,7 +400,7 @@ async def get_audit_log(
 
 @router.get("/logs/retention/stats", response_model=dict)
 async def get_retention_stats(
-    agent_id: str = Depends(get_current_agent),
+    auth_id: str = Depends(authenticate_request),
     db: Session = Depends(get_db)
 ):
     """

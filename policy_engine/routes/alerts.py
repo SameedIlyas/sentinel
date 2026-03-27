@@ -7,7 +7,7 @@ import logging
 import uuid
 
 from policy_engine.database import get_db
-from policy_engine.auth.api_key import get_current_agent
+from policy_engine.auth.rbac import authenticate_request
 from policy_engine.models.alert import Alert
 from policy_engine.models.alert_config import AlertConfig
 from policy_engine.models.schemas import (
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 @router.post("/configure", status_code=status.HTTP_200_OK)
 async def configure_alerts(
     config: AlertConfigRequest,
-    agent_id: str = Depends(get_current_agent),
+    auth_id: str = Depends(authenticate_request),
     db: Session = Depends(get_db)
 ):
     """
@@ -123,7 +123,7 @@ async def configure_alerts(
 
 @router.get("", response_model=AlertListResponse)
 async def get_alerts(
-    agent_id: str = Depends(get_current_agent),
+    auth_id: str = Depends(authenticate_request),
     db: Session = Depends(get_db),
     alert_type: Optional[str] = Query(None, description="Filter by alert type"),
     severity: Optional[str] = Query(None, description="Filter by severity"),
@@ -189,7 +189,7 @@ async def get_alerts(
 @router.get("/{alert_id}", response_model=AlertResponse)
 async def get_alert(
     alert_id: str,
-    agent_id: str = Depends(get_current_agent),
+    auth_id: str = Depends(authenticate_request),
     db: Session = Depends(get_db)
 ):
     """
@@ -218,7 +218,7 @@ async def get_alert(
 async def acknowledge_alert(
     alert_id: str,
     acknowledge_data: AlertAcknowledge,
-    agent_id: str = Depends(get_current_agent),
+    auth_id: str = Depends(authenticate_request),
     db: Session = Depends(get_db)
 ):
     """
@@ -248,7 +248,7 @@ async def acknowledge_alert(
 @router.post("/test", status_code=status.HTTP_200_OK)
 async def test_slack_webhook(
     config: SlackConfig,
-    agent_id: str = Depends(get_current_agent),
+    auth_id: str = Depends(authenticate_request),
     db: Session = Depends(get_db)
 ):
     """
@@ -284,7 +284,7 @@ async def test_slack_webhook(
 
 @router.get("/rules/list", response_model=list[AlertRuleResponse])
 async def list_alert_rules(
-    agent_id: str = Depends(get_current_agent),
+    auth_id: str = Depends(authenticate_request),
     db: Session = Depends(get_db),
     enabled_only: bool = Query(False, description="Show only enabled rules")
 ):

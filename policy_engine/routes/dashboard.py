@@ -5,7 +5,7 @@ Provides aggregated metrics and statistics for the dashboard overview.
 """
 
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
+from typing import Dict
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, desc
@@ -14,7 +14,6 @@ from policy_engine.database import get_db
 from policy_engine.models.agent import Agent
 from policy_engine.models.audit_log import AuditLog
 from policy_engine.models.alert import Alert
-from policy_engine.models.policy import Policy
 from policy_engine.models.schemas import DashboardMetrics
 from policy_engine.auth.rbac import get_current_user
 from policy_engine.models.user import User
@@ -54,32 +53,32 @@ async def get_dashboard_metrics(
         AuditLog.timestamp >= last_30d
     ).count()
     
-    # 3. Blocked actions (policy_decision = 'block' in last 30 days)
+    # 3. Blocked actions (decision = 'blocked' in last 30 days)
     blocked_actions = db.query(AuditLog).filter(
         and_(
             AuditLog.timestamp >= last_30d,
-            AuditLog.policy_decision == 'block'
+            AuditLog.decision == 'BLOCKED'
         )
     ).count()
     
     # 4. Financial metrics (from audit log metadata)
-    # Look for financial actions in audit logs
     money_saved = 0
     money_spent = 0
     
     financial_logs = db.query(AuditLog).filter(
         and_(
             AuditLog.timestamp >= last_30d,
-            AuditLog.action.like('%payment%') | AuditLog.action.like('%transaction%')
+            AuditLog.tool_name.like('%payment%') | AuditLog.tool_name.like('%transaction%')
         )
     ).all()
     
     for log in financial_logs:
-        if log.details:
-            amount = log.details.get('amount', 0)
-            if log.policy_decision == 'block':
+        meta = log.log_metadata or {}
+        if isinstance(meta, dict):
+            amount = meta.get('amount', 0)
+            if log.decision.value == 'blocked':
                 money_saved += amount
-            elif log.policy_decision == 'allow':
+            elif log.decision.value == 'allowed':
                 money_spent += amount
     
     # 5. Recent alerts (last 10 unacknowledged alerts)
@@ -91,11 +90,10 @@ async def get_dashboard_metrics(
         {
             "id": alert.id,
             "timestamp": alert.timestamp.isoformat(),
-            "severity": alert.severity,
+            "severity": alert.severity.value if hasattr(alert.severity, 'value') else alert.severity,
             "alert_type": alert.alert_type,
-            "message": alert.message,
+            "message": alert.description,
             "agent_id": alert.agent_id,
-            "policy_id": alert.policy_id,
         }
         for alert in recent_alerts_query
     ]
@@ -120,29 +118,27 @@ async def get_dashboard_metrics(
         for agent_id, action_count in top_agents_query
     ]
     
-    # 7. Policy violations by policy (last 7 days)
+    # 7. Policy violations by reason (last 7 days)
     violations_query = db.query(
-        Policy.name,
+        AuditLog.reason,
         func.count(AuditLog.id).label('count')
-    ).join(
-        AuditLog, AuditLog.policy_id == Policy.id
     ).filter(
         and_(
             AuditLog.timestamp >= last_7d,
-            AuditLog.policy_decision == 'block'
+            AuditLog.decision == 'BLOCKED'
         )
     ).group_by(
-        Policy.name
+        AuditLog.reason
     ).order_by(
         desc('count')
     ).limit(10).all()
     
     policy_violations = [
         {
-            "policy_name": policy_name,
+            "policy_name": reason or "Unknown",
             "count": count
         }
-        for policy_name, count in violations_query
+        for reason, count in violations_query
     ]
     
     # 8. Systems accessed (unique systems from last 7 days)
@@ -187,7 +183,7 @@ async def get_dashboard_metrics(
     recent_blocked_query = db.query(AuditLog).filter(
         and_(
             AuditLog.timestamp >= last_7d,
-            AuditLog.policy_decision == 'block'
+            AuditLog.decision == 'BLOCKED'
         )
     ).order_by(desc(AuditLog.timestamp)).limit(20).all()
     
@@ -196,9 +192,8 @@ async def get_dashboard_metrics(
             "id": log.id,
             "timestamp": log.timestamp.isoformat(),
             "agent_id": log.agent_id,
-            "action": log.action,
+            "action": log.tool_name,
             "system_accessed": log.system_accessed,
-            "policy_id": log.policy_id,
         }
         for log in recent_blocked_query
     ]
@@ -214,7 +209,7 @@ async def get_dashboard_metrics(
     ).all()
     
     alerts_by_severity = {
-        severity: count
+        (severity.value if hasattr(severity, 'value') else str(severity)): count
         for severity, count in alert_counts
     }
     

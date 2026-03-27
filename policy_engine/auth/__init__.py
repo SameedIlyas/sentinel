@@ -3,6 +3,7 @@
 from policy_engine.auth.api_key import verify_api_key, get_current_agent
 from policy_engine.auth.rbac import (
     get_current_user,
+    authenticate_request,
     require_role,
     require_permission,
     get_admin_user,
@@ -20,6 +21,7 @@ __all__ = [
     "verify_api_key",
     "get_current_agent",
     "get_current_user",
+    "authenticate_request",
     "require_role",
     "require_permission",
     "get_admin_user",

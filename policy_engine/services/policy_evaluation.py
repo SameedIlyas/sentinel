@@ -3,6 +3,7 @@
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
+import logging
 
 from policy_engine.models.policy import Policy, PolicyType
 from policy_engine.models.schemas import PolicyCheckRequest, PolicyCheckResponse
@@ -10,6 +11,9 @@ from policy_engine.services.access_control_evaluator import AccessControlEvaluat
 from policy_engine.services.financial_evaluator import FinancialEvaluator
 from policy_engine.services.data_protection_evaluator import DataProtectionEvaluator
 from policy_engine.services.condition_matcher import ConditionMatcher
+from policy_engine.services.redis_cache import RedisCacheService
+
+logger = logging.getLogger(__name__)
 
 
 class PolicyEvaluationService:
@@ -32,8 +36,11 @@ class PolicyEvaluationService:
         self.data_protection_evaluator = DataProtectionEvaluator()
         self.matcher = ConditionMatcher()
         
-        # Simple in-memory cache (in production, use Redis)
-        self._cache: Dict[str, tuple] = {}
+        # Redis cache service
+        self.cache = RedisCacheService()
+        
+        # Fallback in-memory cache for when Redis is unavailable
+        self._fallback_cache: Dict[str, tuple] = {}
         self._cache_ttl = timedelta(minutes=5)
     
     def evaluate(self, request: PolicyCheckRequest) -> PolicyCheckResponse:
@@ -56,11 +63,25 @@ class PolicyEvaluationService:
             'timestamp': request.timestamp
         })
         
-        # Check cache first
-        cache_key = self._build_cache_key(request)
-        cached_result = self._get_from_cache(cache_key)
+        # Build cache key
+        cache_key = self.cache.build_cache_key(
+            agent_id=request.agent_id,
+            tool_name=request.tool_name,
+            arguments=request.arguments
+        )
+        
+        # Check Redis cache first
+        cached_result = self.cache.get_policy_decision(cache_key)
         if cached_result:
+            logger.debug(f"Cache hit for key: {cache_key}")
             return cached_result
+        
+        # Fallback to in-memory cache if Redis unavailable
+        if not self.cache.is_connected():
+            logger.warning("Redis unavailable, using fallback in-memory cache")
+            cached_result = self._get_from_fallback_cache(cache_key)
+            if cached_result:
+                return cached_result
         
         # Get all enabled policies for this agent
         policies = self._get_applicable_policies(request.agent_id)
@@ -219,29 +240,28 @@ class PolicyEvaluationService:
         
         return applicable_policies
     
-    def _build_cache_key(self, request: PolicyCheckRequest) -> str:
+    def _cache_result(self, cache_key: str, response: PolicyCheckResponse) -> None:
         """
-        Build cache key from request
+        Cache evaluation result in Redis (with fallback to in-memory)
         
         Args:
-            request: Policy check request
+            cache_key: Cache key
+            response: Policy check response
+        """
+        # Try Redis first
+        if self.cache.is_connected():
+            self.cache.set_policy_decision(cache_key, response)
+        else:
+            # Fallback to in-memory cache
+            self._fallback_cache[cache_key] = (response, datetime.utcnow())
             
-        Returns:
-            Cache key string
-        """
-        # Simple cache key based on agent, tool, and arguments
-        # In production, use a hash of the request data
-        import json
-        key_data = {
-            'agent_id': request.agent_id,
-            'tool_name': request.tool_name,
-            'arguments': request.arguments
-        }
-        return json.dumps(key_data, sort_keys=True)
+            # Simple cache cleanup
+            if len(self._fallback_cache) > 1000:
+                self._cleanup_fallback_cache()
     
-    def _get_from_cache(self, cache_key: str) -> Optional[PolicyCheckResponse]:
+    def _get_from_fallback_cache(self, cache_key: str) -> Optional[PolicyCheckResponse]:
         """
-        Get result from cache if not expired
+        Get result from fallback in-memory cache
         
         Args:
             cache_key: Cache key
@@ -249,43 +269,98 @@ class PolicyEvaluationService:
         Returns:
             Cached response or None
         """
-        if cache_key in self._cache:
-            cached_response, cached_time = self._cache[cache_key]
+        if cache_key in self._fallback_cache:
+            cached_response, cached_time = self._fallback_cache[cache_key]
             
             # Check if cache is still valid
             if datetime.utcnow() - cached_time < self._cache_ttl:
                 return cached_response
             else:
                 # Remove expired cache entry
-                del self._cache[cache_key]
+                del self._fallback_cache[cache_key]
         
         return None
     
-    def _cache_result(self, cache_key: str, response: PolicyCheckResponse) -> None:
-        """
-        Cache evaluation result
-        
-        Args:
-            cache_key: Cache key
-            response: Policy check response
-        """
-        self._cache[cache_key] = (response, datetime.utcnow())
-        
-        # Simple cache cleanup - remove old entries if cache grows too large
-        if len(self._cache) > 1000:
-            self._cleanup_cache()
-    
-    def _cleanup_cache(self) -> None:
-        """Clean up expired cache entries"""
+    def _cleanup_fallback_cache(self) -> None:
+        """Clean up expired fallback cache entries"""
         current_time = datetime.utcnow()
         expired_keys = [
-            key for key, (_, cached_time) in self._cache.items()
+            key for key, (_, cached_time) in self._fallback_cache.items()
             if current_time - cached_time >= self._cache_ttl
         ]
         
         for key in expired_keys:
-            del self._cache[key]
+            del self._fallback_cache[key]
+    
+    def invalidate_cache(self, policy_id: Optional[str] = None, agent_id: Optional[str] = None) -> int:
+        """
+        Invalidate cached policy decisions
+        
+        Args:
+            policy_id: Optional specific policy ID to invalidate
+            agent_id: Optional specific agent ID to invalidate
+            
+        Returns:
+            Number of keys invalidated
+        """
+        count = 0
+        
+        if agent_id:
+            count = self.cache.invalidate_agent_cache(agent_id)
+        elif policy_id:
+            count = self.cache.invalidate_policy_cache(policy_id)
+        else:
+            count = self.cache.invalidate_policy_cache()
+        
+        # Also clear fallback cache
+        if agent_id or policy_id:
+            # Partial clear not supported for fallback, clear all
+            self._fallback_cache.clear()
+        else:
+            self._fallback_cache.clear()
+        
+        return count
+    
+    def warm_cache_for_agent(self, agent_id: str, frequent_tools: List[Dict[str, Any]]) -> int:
+        """
+        Warm cache with frequently used policy decisions for an agent
+        
+        Args:
+            agent_id: Agent ID
+            frequent_tools: List of frequently used tool calls
+            
+        Returns:
+            Number of entries warmed
+        """
+        def response_generator(tool_call: Dict[str, Any]) -> PolicyCheckResponse:
+            """Generate policy response for a tool call"""
+            from policy_engine.models.schemas import PolicyCheckRequest
+            
+            request = PolicyCheckRequest(
+                agent_id=agent_id,
+                user_id=tool_call.get('user_id', 'system'),
+                tool_name=tool_call['tool_name'],
+                arguments=tool_call.get('arguments', {}),
+                context=tool_call.get('context', {}),
+                timestamp=datetime.utcnow()
+            )
+            
+            return self.evaluate(request)
+        
+        return self.cache.warm_cache(agent_id, frequent_tools, response_generator)
+    
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """
+        Get cache statistics
+        
+        Returns:
+            Dictionary with cache stats
+        """
+        stats = self.cache.get_cache_stats()
+        stats['fallback_cache_size'] = len(self._fallback_cache)
+        return stats
     
     def clear_cache(self) -> None:
         """Clear all cached results"""
-        self._cache.clear()
+        self.cache.clear_all()
+        self._fallback_cache.clear()

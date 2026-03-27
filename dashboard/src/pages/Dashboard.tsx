@@ -15,15 +15,14 @@ import {
   TableHead,
   TableRow,
   Chip,
+  alpha,
 } from '@mui/material';
 import {
   SmartToy,
   Block,
-  AttachMoney,
   Warning,
   TrendingUp,
-  WifiOff,
-  Wifi,
+  FiberManualRecord as DotIcon,
 } from '@mui/icons-material';
 import {
   LineChart,
@@ -37,17 +36,27 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
 } from 'recharts';
 import { format } from 'date-fns';
 import dashboardApi from '@/api/dashboard';
 import { DashboardMetrics } from '@/types';
 import { useDashboardWebSocket } from '@/hooks/useWebSocket';
-
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
+import { useAppStyles } from '@/hooks/useAppStyles';
 
 const Dashboard: React.FC = () => {
+  const { theme, chartTooltip, chartGrid, chartAxis } = useAppStyles();
+
+  const CHART_COLORS = [
+    theme.palette.primary.main,
+    theme.palette.success.main,
+    theme.palette.warning.main,
+    theme.palette.error.main,
+    theme.palette.info.main,
+    '#a78bfa',
+    '#ec4899',
+  ];
+
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +68,6 @@ const Dashboard: React.FC = () => {
     setLoading(false);
   };
 
-  // WebSocket connection for real-time updates
   const { isConnected } = useDashboardWebSocket(handleMetricsUpdate);
 
   const fetchMetrics = async () => {
@@ -76,13 +84,8 @@ const Dashboard: React.FC = () => {
   };
 
   useEffect(() => {
-    // Initial fetch
     fetchMetrics();
-
-    // Fallback polling every 60 seconds (WebSocket should push updates every 30s)
-    // This ensures we have data even if WebSocket fails
     const interval = setInterval(fetchMetrics, 60000);
-
     return () => clearInterval(interval);
   }, []);
 
@@ -93,27 +96,28 @@ const Dashboard: React.FC = () => {
     color: string;
     subtitle?: string;
   }> = ({ title, value, icon, color, subtitle }) => (
-    <Card sx={{ height: '100%' }}>
-      <CardContent>
+    <Card>
+      <CardContent sx={{ p: '20px !important' }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <Box>
-            <Typography color="text.secondary" variant="body2" gutterBottom>
+            <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.75rem', fontWeight: 500, mb: 1 }}>
               {title}
             </Typography>
-            <Typography variant="h4" component="div" sx={{ fontWeight: 'bold', mb: 1 }}>
+            <Typography variant="h3" sx={{ fontWeight: 700, fontSize: '2rem', lineHeight: 1, mb: 0.5 }}>
               {value}
             </Typography>
             {subtitle && (
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
                 {subtitle}
               </Typography>
             )}
           </Box>
           <Box
             sx={{
-              bgcolor: color,
-              borderRadius: 2,
-              p: 1.5,
+              bgcolor: alpha(color, 0.1),
+              border: `1px solid ${alpha(color, 0.15)}`,
+              borderRadius: '10px',
+              p: 1.25,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -128,23 +132,18 @@ const Dashboard: React.FC = () => {
 
   const getSeverityColor = (severity: string) => {
     switch (severity.toLowerCase()) {
-      case 'critical':
-        return 'error';
-      case 'high':
-        return 'error';
-      case 'medium':
-        return 'warning';
-      case 'low':
-        return 'info';
-      default:
-        return 'default';
+      case 'critical': return '#ef4444';
+      case 'high': return '#f97316';
+      case 'medium': return '#f59e0b';
+      case 'low': return '#3b82f6';
+      default: return '#64748b';
     }
   };
 
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <CircularProgress size={60} />
+        <CircularProgress size={40} sx={{ color: 'primary.main' }} />
       </Box>
     );
   }
@@ -152,9 +151,7 @@ const Dashboard: React.FC = () => {
   if (error) {
     return (
       <Box>
-        <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
-          Dashboard Overview
-        </Typography>
+        <Typography variant="h4" sx={{ fontWeight: 700, mb: 3, letterSpacing: '-0.02em' }}>Dashboard</Typography>
         <MuiAlert severity="error">{error}</MuiAlert>
       </Box>
     );
@@ -163,26 +160,23 @@ const Dashboard: React.FC = () => {
   if (!metrics) {
     return (
       <Box>
-        <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
-          Dashboard Overview
-        </Typography>
+        <Typography variant="h4" sx={{ fontWeight: 700, mb: 3, letterSpacing: '-0.02em' }}>Dashboard</Typography>
         <MuiAlert severity="info">No data available</MuiAlert>
       </Box>
     );
   }
 
-  // Prepare data for charts
   const activityData = metrics.activity_timeline.map((item) => ({
     time: format(new Date(item.timestamp), 'HH:mm'),
     count: item.count,
   }));
 
-  const topAgentsData = metrics.top_agents.slice(0, 10).map((agent) => ({
-    name: agent.agent_id.substring(0, 20),
+  const topAgentsData = metrics.top_agents.slice(0, 8).map((agent) => ({
+    name: agent.agent_id.length > 16 ? agent.agent_id.substring(0, 16) + '...' : agent.agent_id,
     actions: agent.action_count,
   }));
 
-  const systemsData = metrics.systems_accessed.slice(0, 10).map((system) => ({
+  const systemsData = metrics.systems_accessed.slice(0, 8).map((system) => ({
     name: system.system,
     accesses: system.access_count,
   }));
@@ -193,164 +187,136 @@ const Dashboard: React.FC = () => {
     value: count,
   }));
 
+  const primaryMain = theme.palette.primary.main;
+  const paperBg = theme.palette.background.paper;
+
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-          Dashboard Overview
-        </Typography>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 700, letterSpacing: '-0.02em' }}>Dashboard</Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
+            Platform overview and real-time metrics
+          </Typography>
+        </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Chip
-            icon={isConnected ? <Wifi /> : <WifiOff />}
-            label={isConnected ? 'Live' : 'Offline'}
-            color={isConnected ? 'success' : 'default'}
-            size="small"
-          />
-          <Typography variant="caption" color="text.secondary">
-            Last updated: {format(lastUpdate, 'MMM dd, yyyy HH:mm:ss')}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+            <DotIcon sx={{ fontSize: 8, color: isConnected ? 'success.main' : 'text.secondary', animation: isConnected ? 'pulse 2s infinite' : 'none', '@keyframes pulse': { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0.4 } } }} />
+            <Typography variant="caption" sx={{ color: isConnected ? 'success.main' : 'text.secondary', fontWeight: 500 }}>
+              {isConnected ? 'Live' : 'Offline'}
+            </Typography>
+          </Box>
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+            {format(lastUpdate, 'HH:mm:ss')}
           </Typography>
         </Box>
       </Box>
 
-      <Grid container spacing={3}>
-        {/* Key Metrics */}
+      <Grid container spacing={2.5}>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
             title="Active Agents"
             value={metrics.active_agents}
-            icon={<SmartToy sx={{ color: 'white', fontSize: 32 }} />}
-            color="primary.main"
+            icon={<SmartToy sx={{ color: 'primary.main', fontSize: 24 }} />}
+            color={theme.palette.primary.main}
             subtitle="Last 24 hours"
           />
         </Grid>
-
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
             title="Total Actions"
             value={metrics.total_actions.toLocaleString()}
-            icon={<TrendingUp sx={{ color: 'white', fontSize: 32 }} />}
-            color="info.main"
+            icon={<TrendingUp sx={{ color: 'info.main', fontSize: 24 }} />}
+            color={theme.palette.info.main}
             subtitle="Last 30 days"
           />
         </Grid>
-
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
-            title="Blocked Actions"
+            title="Blocked"
             value={metrics.blocked_actions}
-            icon={<Block sx={{ color: 'white', fontSize: 32 }} />}
-            color="error.main"
+            icon={<Block sx={{ color: 'error.main', fontSize: 24 }} />}
+            color={theme.palette.error.main}
             subtitle="Last 30 days"
           />
         </Grid>
-
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
             title="Active Alerts"
             value={totalAlerts}
-            icon={<Warning sx={{ color: 'white', fontSize: 32 }} />}
-            color="warning.main"
+            icon={<Warning sx={{ color: 'warning.main', fontSize: 24 }} />}
+            color={theme.palette.warning.main}
             subtitle="Unacknowledged"
           />
         </Grid>
 
-        {/* Financial Metrics */}
         <Grid item xs={12} md={6}>
           <Card sx={{ height: '100%' }}>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Financial Impact
-              </Typography>
-              <Box sx={{ display: 'flex', gap: 4, mt: 2 }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 0.5 }}>Financial Impact</Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>Blocked vs approved transactions</Typography>
+              <Box sx={{ display: 'flex', gap: 4, mt: 3 }}>
                 <Box sx={{ flex: 1 }}>
-                  <Typography variant="body2" color="text.secondary" gutterBottom>
-                    Money Saved
-                  </Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <AttachMoney sx={{ color: 'success.main', fontSize: 32 }} />
-                    <Typography variant="h4" color="success.main" sx={{ fontWeight: 'bold' }}>
+                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>Saved</Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5, mt: 0.5 }}>
+                    <Typography variant="h4" sx={{ fontWeight: 700, color: 'success.main' }}>
                       ${metrics.money_saved.toLocaleString()}
                     </Typography>
                   </Box>
-                  <Typography variant="caption" color="text.secondary">
-                    Blocked transactions
-                  </Typography>
                 </Box>
                 <Box sx={{ flex: 1 }}>
-                  <Typography variant="body2" color="text.secondary" gutterBottom>
-                    Money Spent
-                  </Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <AttachMoney sx={{ color: 'warning.main', fontSize: 32 }} />
-                    <Typography variant="h4" color="warning.main" sx={{ fontWeight: 'bold' }}>
+                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>Spent</Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5, mt: 0.5 }}>
+                    <Typography variant="h4" sx={{ fontWeight: 700, color: 'warning.main' }}>
                       ${metrics.money_spent.toLocaleString()}
                     </Typography>
                   </Box>
-                  <Typography variant="caption" color="text.secondary">
-                    Approved transactions
-                  </Typography>
                 </Box>
               </Box>
             </CardContent>
           </Card>
         </Grid>
 
-        {/* Alert Distribution */}
         <Grid item xs={12} md={6}>
           <Card sx={{ height: '100%' }}>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Alerts by Severity
-              </Typography>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 0.5 }}>Alerts by Severity</Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>Last 7 days</Typography>
               {alertsData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={200}>
+                <ResponsiveContainer width="100%" height={180}>
                   <PieChart>
-                    <Pie
-                      data={alertsData}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={(entry: { name: string; value: number }) => `${entry.name}: ${entry.value}`}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {alertsData.map((_entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
+                    <Pie data={alertsData} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={3} dataKey="value" stroke="none">
+                      {alertsData.map((_e, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
                     </Pie>
-                    <Tooltip />
+                    <Tooltip {...chartTooltip} />
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
-                <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
-                  No alerts in the last 7 days
-                </Typography>
+                <Box sx={{ py: 6, textAlign: 'center' }}>
+                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>No alerts</Typography>
+                </Box>
               )}
             </CardContent>
           </Card>
         </Grid>
 
-        {/* Activity Timeline */}
         <Grid item xs={12}>
           <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Activity Timeline (Last 24 Hours)
-            </Typography>
-            <ResponsiveContainer width="100%" height={300}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 0.5 }}>Activity Timeline</Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 2 }}>Hourly actions over the last 24 hours</Typography>
+            <ResponsiveContainer width="100%" height={260}>
               <LineChart data={activityData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="time" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
+                <CartesianGrid strokeDasharray="3 3" stroke={chartGrid} />
+                <XAxis dataKey="time" stroke={chartAxis} fontSize={11} tickLine={false} axisLine={false} />
+                <YAxis stroke={chartAxis} fontSize={11} tickLine={false} axisLine={false} />
+                <Tooltip {...chartTooltip} />
                 <Line
                   type="monotone"
                   dataKey="count"
-                  stroke="#8884d8"
+                  stroke={primaryMain}
                   strokeWidth={2}
-                  dot={{ r: 4 }}
-                  activeDot={{ r: 6 }}
+                  dot={false}
+                  activeDot={{ r: 4, fill: primaryMain, stroke: paperBg, strokeWidth: 2 }}
                   name="Actions"
                 />
               </LineChart>
@@ -358,109 +324,85 @@ const Dashboard: React.FC = () => {
           </Paper>
         </Grid>
 
-        {/* Top Agents */}
         <Grid item xs={12} md={6}>
           <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Top Agents by Activity
-            </Typography>
+            <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 0.5 }}>Top Agents</Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 2 }}>By action count (7 days)</Typography>
             {topAgentsData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={topAgentsData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="actions" fill="#8884d8" name="Actions" />
+                  <CartesianGrid strokeDasharray="3 3" stroke={chartGrid} />
+                  <XAxis dataKey="name" stroke={chartAxis} fontSize={10} tickLine={false} axisLine={false} />
+                  <YAxis stroke={chartAxis} fontSize={11} tickLine={false} axisLine={false} />
+                  <Tooltip {...chartTooltip} />
+                  <Bar dataKey="actions" fill={primaryMain} radius={[4, 4, 0, 0]} name="Actions" />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
-                No agent activity in the last 7 days
-              </Typography>
+              <Box sx={{ py: 6, textAlign: 'center' }}><Typography variant="body2" sx={{ color: 'text.secondary' }}>No activity</Typography></Box>
             )}
           </Paper>
         </Grid>
 
-        {/* Systems Accessed */}
         <Grid item xs={12} md={6}>
           <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Systems Accessed
-            </Typography>
+            <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 0.5 }}>Systems Accessed</Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 2 }}>Last 7 days</Typography>
             {systemsData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={systemsData} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" />
-                  <YAxis dataKey="name" type="category" width={120} />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="accesses" fill="#82ca9d" name="Accesses" />
+                  <CartesianGrid strokeDasharray="3 3" stroke={chartGrid} />
+                  <XAxis type="number" stroke={chartAxis} fontSize={11} tickLine={false} axisLine={false} />
+                  <YAxis dataKey="name" type="category" width={100} stroke={chartAxis} fontSize={11} tickLine={false} axisLine={false} />
+                  <Tooltip {...chartTooltip} />
+                  <Bar dataKey="accesses" fill={theme.palette.success.main} radius={[0, 4, 4, 0]} name="Accesses" />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
-                No system access in the last 7 days
-              </Typography>
+              <Box sx={{ py: 6, textAlign: 'center' }}><Typography variant="body2" sx={{ color: 'text.secondary' }}>No data</Typography></Box>
             )}
           </Paper>
         </Grid>
 
-        {/* Recent Blocked Actions */}
-        <Grid item xs={12}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Recent Blocked Actions
-            </Typography>
-            {metrics.recent_blocked_actions.length > 0 ? (
+        {metrics.recent_blocked_actions.length > 0 && (
+          <Grid item xs={12}>
+            <Paper sx={{ p: 3 }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>Recent Blocked Actions</Typography>
               <TableContainer>
-                <Table>
+                <Table size="small">
                   <TableHead>
                     <TableRow>
-                      <TableCell>Timestamp</TableCell>
-                      <TableCell>Agent ID</TableCell>
+                      <TableCell>Time</TableCell>
+                      <TableCell>Agent</TableCell>
                       <TableCell>Action</TableCell>
                       <TableCell>System</TableCell>
-                      <TableCell>Policy</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {metrics.recent_blocked_actions.slice(0, 10).map((action) => (
-                      <TableRow key={action.id} hover>
-                        <TableCell>{format(new Date(action.timestamp), 'MMM dd, HH:mm:ss')}</TableCell>
-                        <TableCell>{action.agent_id}</TableCell>
+                    {metrics.recent_blocked_actions.slice(0, 8).map((action) => (
+                      <TableRow key={action.id}>
+                        <TableCell sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.75rem' }}>{format(new Date(action.timestamp), 'MMM dd, HH:mm:ss')}</TableCell>
+                        <TableCell sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.75rem' }}>{action.agent_id}</TableCell>
                         <TableCell>{action.action}</TableCell>
                         <TableCell>{action.system_accessed}</TableCell>
-                        <TableCell>
-                          {action.policy_id ? `Policy #${action.policy_id}` : 'N/A'}
-                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               </TableContainer>
-            ) : (
-              <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
-                No blocked actions in the last 7 days
-              </Typography>
-            )}
-          </Paper>
-        </Grid>
+            </Paper>
+          </Grid>
+        )}
 
-        {/* Recent Alerts */}
-        <Grid item xs={12}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Recent Alerts
-            </Typography>
-            {metrics.recent_alerts.length > 0 ? (
+        {metrics.recent_alerts.length > 0 && (
+          <Grid item xs={12}>
+            <Paper sx={{ p: 3 }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>Recent Alerts</Typography>
               <TableContainer>
-                <Table>
+                <Table size="small">
                   <TableHead>
                     <TableRow>
-                      <TableCell>Timestamp</TableCell>
+                      <TableCell>Time</TableCell>
                       <TableCell>Severity</TableCell>
                       <TableCell>Type</TableCell>
                       <TableCell>Message</TableCell>
@@ -468,31 +410,37 @@ const Dashboard: React.FC = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {metrics.recent_alerts.slice(0, 10).map((alert) => (
-                      <TableRow key={alert.id} hover>
-                        <TableCell>{format(new Date(alert.timestamp), 'MMM dd, HH:mm:ss')}</TableCell>
+                    {metrics.recent_alerts.slice(0, 8).map((alert) => (
+                      <TableRow key={alert.id}>
+                        <TableCell sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.75rem' }}>{format(new Date(alert.timestamp), 'MMM dd, HH:mm:ss')}</TableCell>
                         <TableCell>
                           <Chip
                             label={alert.severity}
-                            color={getSeverityColor(alert.severity) as any}
                             size="small"
+                            sx={{
+                              bgcolor: alpha(getSeverityColor(alert.severity), 0.1),
+                              color: getSeverityColor(alert.severity),
+                              border: `1px solid ${alpha(getSeverityColor(alert.severity), 0.2)}`,
+                              fontWeight: 600,
+                              fontSize: '0.65rem',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.05em',
+                              minWidth: 72,
+                              justifyContent: 'center',
+                            }}
                           />
                         </TableCell>
                         <TableCell>{alert.alert_type}</TableCell>
                         <TableCell>{alert.message}</TableCell>
-                        <TableCell>{alert.agent_id || 'N/A'}</TableCell>
+                        <TableCell sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.75rem' }}>{alert.agent_id || '—'}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               </TableContainer>
-            ) : (
-              <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
-                No recent alerts
-              </Typography>
-            )}
-          </Paper>
-        </Grid>
+            </Paper>
+          </Grid>
+        )}
       </Grid>
     </Box>
   );

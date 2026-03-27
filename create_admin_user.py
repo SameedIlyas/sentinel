@@ -97,7 +97,7 @@ def create_admin_user():
         
         print()
         print("=" * 80)
-        print("  ✓ Admin user created successfully!")
+        print("  [OK] Admin user created successfully!")
         print("=" * 80)
         print()
         print(f"  User ID:  {admin_user.id}")
@@ -146,13 +146,13 @@ def create_default_admin():
         db.commit()
         
         print("=" * 80)
-        print("  ✓ Default admin user created!")
+        print("  [OK] Default admin user created!")
         print("=" * 80)
         print()
         print(f"  Username: admin")
         print(f"  Password: admin123")
         print()
-        print("  ⚠️  WARNING: Change this password immediately!")
+        print("  WARNING: Change this password immediately!")
         print()
         
     except Exception as e:
