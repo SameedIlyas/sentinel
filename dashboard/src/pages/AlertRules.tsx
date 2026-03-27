@@ -41,6 +41,7 @@ import {
 import { alpha } from '@mui/material/styles';
 import alertsApi, { AlertRule, AlertRuleCreate, SlackConfig } from '@/api/alerts';
 import { useAppStyles } from '@/hooks/useAppStyles';
+import { utc } from '@/utils/date';
 
 function SeverityBadge({ severity }: { severity: string }) {
   const theme = useTheme();
@@ -611,7 +612,7 @@ const AlertRules: React.FC = () => {
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2" sx={{ color: 'text.primary' }}>
-                      {new Date(rule.created_at).toLocaleDateString()}
+                      {utc(rule.created_at).toLocaleDateString()}
                     </Typography>
                   </TableCell>
                   <TableCell align="right">

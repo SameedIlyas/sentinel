@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from policy_engine.database import get_db
@@ -34,37 +34,41 @@ def create_audit_log(
         response: Policy check response
     """
     try:
-        # Map policy decision to audit log decision
+        import uuid as _uuid
+
         decision_map = {
             'allow': 'allowed',
             'block': 'blocked',
-            'require_approval': 'approved'  # Or could be 'pending'
+            'require_approval': 'requires_approval',
         }
-        
+
+        context = request.context or {}
+
         audit_log = AuditLog(
+            id=str(_uuid.uuid4()),
             agent_id=request.agent_id,
+            agent_name=context.get('agent_name', request.agent_id),
             user_id=request.user_id,
             tool_name=request.tool_name,
-            tool_args=request.tool_args,
-            tool_result=None,  # Not available at check time
-            policy_ids=response.policy_ids,
+            arguments=request.arguments,
+            system_accessed=context.get('system', 'unknown'),
+            data_touched=context.get('data_touched', []),
             decision=decision_map.get(response.decision, 'blocked'),
+            policy_ids=response.policy_ids,
             reason=response.reason,
-            system=request.context.get('system') if request.context else None,
-            session_id=request.session_id,
-            timestamp=datetime.utcnow()
+            log_metadata=response.metadata or {},
+            timestamp=datetime.now(timezone.utc),
         )
         
         db.add(audit_log)
         db.commit()
         
-        logger.debug(f"Created audit log for agent={request.agent_id}, tool={request.tool_name}")
+        logger.info(f"Created audit log {audit_log.id} for agent={request.agent_id}, tool={request.tool_name}")
         
         return audit_log.id
         
     except Exception as e:
         logger.error(f"Failed to create audit log: {str(e)}", exc_info=True)
-        # Don't fail the policy check if audit logging fails
         db.rollback()
         return None
 

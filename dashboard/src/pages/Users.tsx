@@ -39,6 +39,7 @@ import {
 } from '@mui/icons-material';
 import { useTheme } from '@mui/material/styles';
 import { format } from 'date-fns';
+import { utc } from '@/utils/date';
 import usersApi, { UserResponse, UserCreateRequest, UserUpdateRequest } from '@/api/users';
 
 const ROLE_COLORS: Record<string, string> = {
@@ -368,12 +369,12 @@ const Users: React.FC = () => {
                     </TableCell>
                     <TableCell>
                       <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
-                        {format(new Date(user.created_at), 'MMM dd, yyyy')}
+                        {format(utc(user.created_at), 'MMM dd, yyyy')}
                       </Typography>
                     </TableCell>
                     <TableCell>
                       <Typography variant="body2" sx={{ fontSize: '0.8rem', color: user.last_login ? 'text.primary' : 'text.secondary' }}>
-                        {user.last_login ? format(new Date(user.last_login), 'MMM dd, yyyy HH:mm') : 'Never'}
+                        {user.last_login ? format(utc(user.last_login), 'MMM dd, yyyy HH:mm') : 'Never'}
                       </Typography>
                     </TableCell>
                     <TableCell align="right">

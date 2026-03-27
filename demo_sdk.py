@@ -62,51 +62,48 @@ DECISION_STYLE = {
 # ---------------------------------------------------------------------------
 
 def resolve_api_keys():
-    """Look up raw API keys from the database so the user doesn't have to copy-paste."""
+    """Generate one temporary API key per unique agent for the demo session."""
     try:
         import hashlib
+        import uuid
         from policy_engine.database import SessionLocal
         from policy_engine.models.api_key import APIKey
 
         db = SessionLocal()
-        records = db.query(APIKey).filter(APIKey.is_active == True).all()
-        db.close()
+        try:
+            # Clean up old demo keys to prevent table bloat
+            db.query(APIKey).filter(
+                APIKey.name.like("Demo Session Key%")
+            ).delete(synchronize_session=False)
+            db.commit()
 
-        if not records:
-            return {}
+            # Get unique agent IDs that have at least one real (non-demo) key
+            agent_ids = [
+                r[0] for r in db.query(APIKey.agent_id).filter(
+                    APIKey.is_active == True
+                ).distinct().all()
+            ]
 
-        # We can't reverse the hash, so we need to brute-force match with
-        # the keys that the seed script could have generated. Instead, we
-        # return a mapping of agent_id -> key_hash, and we'll send the raw
-        # key via X-API-Key. Since we can't reverse SHA-256, we'll generate
-        # a fresh key, store it, and use it.
-        #
-        # Better approach: generate temporary keys for the demo.
-        import uuid
-        keys = {}
-        for record in records:
-            agent_id = record.agent_id
-            raw_key = f"sentinel_demo_{uuid.uuid4().hex[:24]}"
-            new_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+            if not agent_ids:
+                return {}
 
-            # Create a temporary demo key
-            demo_key = APIKey(
-                key=new_hash,
-                agent_id=agent_id,
-                name=f"Demo Session Key ({agent_id})",
-                is_active=True,
-            )
-            db2 = SessionLocal()
-            try:
-                db2.add(demo_key)
-                db2.commit()
+            keys = {}
+            for agent_id in agent_ids:
+                raw_key = f"sentinel_demo_{uuid.uuid4().hex[:24]}"
+                new_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+                demo_key = APIKey(
+                    key=new_hash,
+                    agent_id=agent_id,
+                    name=f"Demo Session Key ({agent_id})",
+                    is_active=True,
+                )
+                db.add(demo_key)
                 keys[agent_id] = raw_key
-            except Exception:
-                db2.rollback()
-            finally:
-                db2.close()
 
-        return keys
+            db.commit()
+            return keys
+        finally:
+            db.close()
 
     except Exception as e:
         print(f"{C.YELLOW}  Warning: Could not auto-resolve API keys: {e}{C.RESET}")

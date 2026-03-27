@@ -12,6 +12,7 @@ class Decision(str, enum.Enum):
     ALLOWED = "allowed"
     BLOCKED = "blocked"
     APPROVED = "approved"
+    REQUIRES_APPROVAL = "requires_approval"
 
 
 class AuditLog(Base):

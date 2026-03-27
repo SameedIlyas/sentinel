@@ -1,7 +1,7 @@
 """Alert triggering and management service"""
 
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 import logging
 import uuid
@@ -61,7 +61,7 @@ class AlertService:
             # Create new alert
             alert = Alert(
                 id=str(uuid.uuid4()),
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 severity=severity,
                 alert_type=alert_type,
                 agent_id=agent_id,
@@ -97,7 +97,7 @@ class AlertService:
         Returns:
             True if duplicate found within deduplication window
         """
-        cutoff_time = datetime.utcnow() - timedelta(
+        cutoff_time = datetime.now(timezone.utc) - timedelta(
             seconds=self.deduplication_window_seconds
         )
         
@@ -129,7 +129,7 @@ class AlertService:
             
             alert.acknowledged = True
             alert.acknowledged_by = acknowledged_by
-            alert.acknowledged_at = datetime.utcnow()
+            alert.acknowledged_at = datetime.now(timezone.utc)
             
             self.db.commit()
             self.db.refresh(alert)
@@ -177,7 +177,7 @@ class AlertService:
             return AlertSeverity.CRITICAL
         
         # Blocked actions are high or critical based on policy type
-        if decision == "blocked":
+        if decision in ("block", "blocked"):
             if policy_type == PolicyType.DATA_PROTECTION:
                 return AlertSeverity.CRITICAL
             elif policy_type == PolicyType.FINANCIAL:
@@ -216,7 +216,7 @@ class AlertService:
             return "new_agent"
         
         # Blocked access
-        if decision == "blocked":
+        if decision in ("block", "blocked"):
             if policy_type == PolicyType.ACCESS_CONTROL:
                 return "blocked_access"
             elif policy_type == PolicyType.FINANCIAL:
@@ -256,7 +256,7 @@ class AlertService:
             return True
         
         # Alert on blocked or require_approval actions
-        if decision in ["blocked", "require_approval"]:
+        if decision in ["block", "blocked", "require_approval"]:
             return True
         
         return False

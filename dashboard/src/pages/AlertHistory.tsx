@@ -39,6 +39,7 @@ import { format, formatDistanceToNow } from 'date-fns';
 import alertsApi, { Alert } from '@/api/alerts';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppStyles } from '@/hooks/useAppStyles';
+import { utc } from '@/utils/date';
 
 function SeverityBadge({ severity }: { severity: string }) {
   const theme = useTheme();
@@ -90,7 +91,7 @@ function StatusIndicator({
     acknowledged && acknowledgedBy
       ? `Acknowledged by ${acknowledgedBy}${
           acknowledgedAt
-            ? ` at ${format(new Date(acknowledgedAt), 'MMM dd, yyyy HH:mm')}`
+            ? ` at ${format(utc(acknowledgedAt), 'MMM dd, yyyy HH:mm')}`
             : ''
         }`
       : undefined;
@@ -471,10 +472,10 @@ const AlertHistory: React.FC = () => {
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2" sx={{ color: 'text.primary', fontWeight: 500 }}>
-                      {format(new Date(alert.timestamp), 'MMM dd, yyyy HH:mm:ss')}
+                      {format(utc(alert.timestamp), 'MMM dd, yyyy HH:mm:ss')}
                     </Typography>
                     <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
-                      {formatDistanceToNow(new Date(alert.timestamp), { addSuffix: true })}
+                      {formatDistanceToNow(utc(alert.timestamp), { addSuffix: true })}
                     </Typography>
                   </TableCell>
                   <TableCell>
@@ -580,7 +581,7 @@ const AlertHistory: React.FC = () => {
                   Timestamp
                 </Typography>
                 <Typography variant="body2" sx={{ mb: 2, color: 'text.primary' }}>
-                  {format(new Date(selectedAlert.timestamp), 'PPpp')}
+                  {format(utc(selectedAlert.timestamp), 'PPpp')}
                 </Typography>
               </Grid>
 
@@ -650,7 +651,7 @@ const AlertHistory: React.FC = () => {
                     </Typography>
                     <Typography variant="body2" sx={{ mb: 2, color: 'text.primary' }}>
                       {selectedAlert.acknowledged_at
-                        ? format(new Date(selectedAlert.acknowledged_at), 'PPpp')
+                        ? format(utc(selectedAlert.acknowledged_at), 'PPpp')
                         : 'N/A'}
                     </Typography>
                   </Grid>

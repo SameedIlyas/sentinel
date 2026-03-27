@@ -33,6 +33,7 @@ import agentsApi from '@/api/agents';
 import apiClient from '@/api/client';
 import { Agent, AgentActivityMetrics, AuditLog } from '@/types';
 import { useAppStyles } from '@/hooks/useAppStyles';
+import { utc } from '@/utils/date';
 
 function useSurfaceCardSx() {
   const styles = useAppStyles();
@@ -323,7 +324,7 @@ const AgentDetail: React.FC = () => {
         <Grid item xs={12} sm={6} md={4}>
           <InfoCard label="First seen">
             <Typography sx={{ fontSize: '0.9rem' }}>
-              {format(new Date(metrics.first_seen), 'MMM dd, yyyy HH:mm')}
+              {format(utc(metrics.first_seen), 'MMM dd, yyyy HH:mm')}
             </Typography>
           </InfoCard>
         </Grid>
@@ -331,7 +332,7 @@ const AgentDetail: React.FC = () => {
           <InfoCard label="Last active">
             <Typography sx={{ fontSize: '0.9rem' }}>
               {metrics.last_active
-                ? `${format(new Date(metrics.last_active), 'MMM dd, yyyy HH:mm')} (${formatDistanceToNow(new Date(metrics.last_active), { addSuffix: true })})`
+                ? `${format(utc(metrics.last_active), 'MMM dd, yyyy HH:mm')} (${formatDistanceToNow(utc(metrics.last_active), { addSuffix: true })})`
                 : 'Never'}
             </Typography>
           </InfoCard>
@@ -339,7 +340,7 @@ const AgentDetail: React.FC = () => {
         <Grid item xs={12} sm={6} md={4}>
           <InfoCard label="Created">
             <Typography sx={{ fontSize: '0.9rem' }}>
-              {format(new Date(agent.created_at), 'MMM dd, yyyy HH:mm')}
+              {format(utc(agent.created_at), 'MMM dd, yyyy HH:mm')}
             </Typography>
           </InfoCard>
         </Grid>
@@ -488,7 +489,7 @@ const AgentDetail: React.FC = () => {
                         <TableRow key={log.id} sx={{ '&:hover': { bgcolor: styles.hoverBg } }}>
                           <TableCell>
                             <Typography sx={{ fontSize: '0.8rem' }}>
-                              {format(new Date(log.timestamp), 'MMM dd, HH:mm:ss')}
+                              {format(utc(log.timestamp), 'MMM dd, HH:mm:ss')}
                             </Typography>
                           </TableCell>
                           <TableCell>
@@ -553,10 +554,10 @@ const AgentDetail: React.FC = () => {
                           <TableCell>{getDecisionIcon(log.decision)}</TableCell>
                           <TableCell>
                             <Typography sx={{ fontSize: '0.8rem' }}>
-                              {format(new Date(log.timestamp), 'MMM dd, yyyy HH:mm:ss')}
+                              {format(utc(log.timestamp), 'MMM dd, yyyy HH:mm:ss')}
                             </Typography>
                             <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', display: 'block' }}>
-                              {formatDistanceToNow(new Date(log.timestamp), { addSuffix: true })}
+                              {formatDistanceToNow(utc(log.timestamp), { addSuffix: true })}
                             </Typography>
                           </TableCell>
                           <TableCell>

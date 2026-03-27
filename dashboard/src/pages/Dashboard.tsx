@@ -43,6 +43,7 @@ import dashboardApi from '@/api/dashboard';
 import { DashboardMetrics } from '@/types';
 import { useDashboardWebSocket } from '@/hooks/useWebSocket';
 import { useAppStyles } from '@/hooks/useAppStyles';
+import { utc } from '@/utils/date';
 
 const Dashboard: React.FC = () => {
   const { theme, chartTooltip, chartGrid, chartAxis } = useAppStyles();
@@ -167,7 +168,7 @@ const Dashboard: React.FC = () => {
   }
 
   const activityData = metrics.activity_timeline.map((item) => ({
-    time: format(new Date(item.timestamp), 'HH:mm'),
+    time: format(utc(item.timestamp), 'HH:mm'),
     count: item.count,
   }));
 
@@ -381,7 +382,7 @@ const Dashboard: React.FC = () => {
                   <TableBody>
                     {metrics.recent_blocked_actions.slice(0, 8).map((action) => (
                       <TableRow key={action.id}>
-                        <TableCell sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.75rem' }}>{format(new Date(action.timestamp), 'MMM dd, HH:mm:ss')}</TableCell>
+                        <TableCell sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.75rem' }}>{format(utc(action.timestamp), 'MMM dd, HH:mm:ss')}</TableCell>
                         <TableCell sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.75rem' }}>{action.agent_id}</TableCell>
                         <TableCell>{action.action}</TableCell>
                         <TableCell>{action.system_accessed}</TableCell>
@@ -412,7 +413,7 @@ const Dashboard: React.FC = () => {
                   <TableBody>
                     {metrics.recent_alerts.slice(0, 8).map((alert) => (
                       <TableRow key={alert.id}>
-                        <TableCell sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.75rem' }}>{format(new Date(alert.timestamp), 'MMM dd, HH:mm:ss')}</TableCell>
+                        <TableCell sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.75rem' }}>{format(utc(alert.timestamp), 'MMM dd, HH:mm:ss')}</TableCell>
                         <TableCell>
                           <Chip
                             label={alert.severity}

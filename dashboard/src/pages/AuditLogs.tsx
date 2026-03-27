@@ -44,6 +44,7 @@ import { format, formatDistanceToNow } from 'date-fns';
 import auditLogsApi from '@/api/auditLogs';
 import { AuditLog } from '@/types';
 import { useAppStyles } from '@/hooks/useAppStyles';
+import { utc } from '@/utils/date';
 
 const AuditLogs: React.FC = () => {
   const styles = useAppStyles();
@@ -54,6 +55,7 @@ const AuditLogs: React.FC = () => {
       allowed: theme.palette.success.main,
       blocked: theme.palette.error.main,
       approved: theme.palette.warning.main,
+      requires_approval: theme.palette.warning.main,
     }),
     [theme.palette.success.main, theme.palette.error.main, theme.palette.warning.main]
   );
@@ -225,6 +227,8 @@ const AuditLogs: React.FC = () => {
       case 'blocked':
         return <BlockedIcon sx={{ color: c, fontSize: 18 }} />;
       case 'approved':
+        return <ApprovalIcon sx={{ color: c, fontSize: 18 }} />;
+      case 'requires_approval':
         return <ApprovalIcon sx={{ color: c, fontSize: 18 }} />;
       default:
         return undefined;
@@ -441,6 +445,9 @@ const AuditLogs: React.FC = () => {
                 <MenuItem value="approved" sx={{ fontSize: '0.8125rem' }}>
                   Approved
                 </MenuItem>
+                <MenuItem value="requires_approval" sx={{ fontSize: '0.8125rem' }}>
+                  Requires Approval
+                </MenuItem>
               </Select>
             </FormControl>
           </Grid>
@@ -563,15 +570,15 @@ const AuditLogs: React.FC = () => {
                   <TableCell sx={tableCellSx}>
                     <Stack direction="row" alignItems="center" spacing={0.75}>
                       {getDecisionIcon(log.decision)}
-                      <Chip label={log.decision.toUpperCase()} size="small" sx={decisionChipSx(log.decision)} />
+                      <Chip label={log.decision.replace(/_/g, ' ').toUpperCase()} size="small" sx={decisionChipSx(log.decision)} />
                     </Stack>
                   </TableCell>
                   <TableCell sx={{ ...tableCellSx, fontFamily: styles.mono }}>
                     <Typography sx={{ fontSize: '0.8rem', fontFamily: styles.mono, color: 'text.primary' }}>
-                      {format(new Date(log.timestamp), 'MMM dd, yyyy HH:mm:ss')}
+                      {format(utc(log.timestamp), 'MMM dd, yyyy HH:mm:ss')}
                     </Typography>
                     <Typography sx={{ fontSize: '0.7rem', fontFamily: styles.mono, color: 'text.secondary' }}>
-                      {formatDistanceToNow(new Date(log.timestamp), { addSuffix: true })}
+                      {formatDistanceToNow(utc(log.timestamp), { addSuffix: true })}
                     </Typography>
                   </TableCell>
                   <TableCell sx={tableCellSx}>
@@ -681,7 +688,7 @@ const AuditLogs: React.FC = () => {
                   Timestamp
                 </Typography>
                 <Typography variant="body2" sx={{ mb: 2, color: 'text.primary', fontFamily: styles.mono, fontSize: '0.85rem' }}>
-                  {format(new Date(selectedLog.timestamp), 'PPpp')}
+                  {format(utc(selectedLog.timestamp), 'PPpp')}
                 </Typography>
               </Grid>
 
@@ -736,7 +743,7 @@ const AuditLogs: React.FC = () => {
                 </Typography>
                 <Box sx={{ mb: 2 }}>
                   <Chip
-                    label={selectedLog.decision.toUpperCase()}
+                    label={selectedLog.decision.replace(/_/g, ' ').toUpperCase()}
                     size="small"
                     icon={getDecisionIcon(selectedLog.decision)}
                     sx={{

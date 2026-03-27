@@ -33,6 +33,7 @@ import { format } from 'date-fns';
 import agentsApi from '@/api/agents';
 import { Agent } from '@/types';
 import { useAppStyles } from '@/hooks/useAppStyles';
+import { utc } from '@/utils/date';
 
 const AgentList: React.FC = () => {
   const navigate = useNavigate();
@@ -340,7 +341,7 @@ const AgentList: React.FC = () => {
                   <TableCell sx={tableCellSx}>
                     {agent.last_active ? (
                       <Typography sx={{ fontSize: '0.8rem' }}>
-                        {format(new Date(agent.last_active), 'MMM dd, yyyy HH:mm')}
+                        {format(utc(agent.last_active), 'MMM dd, yyyy HH:mm')}
                       </Typography>
                     ) : (
                       <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
@@ -350,7 +351,7 @@ const AgentList: React.FC = () => {
                   </TableCell>
                   <TableCell sx={tableCellSx}>
                     <Typography sx={{ fontSize: '0.8rem' }}>
-                      {format(new Date(agent.created_at), 'MMM dd, yyyy')}
+                      {format(utc(agent.created_at), 'MMM dd, yyyy')}
                     </Typography>
                   </TableCell>
                   <TableCell

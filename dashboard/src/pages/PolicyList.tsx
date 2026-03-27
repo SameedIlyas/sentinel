@@ -41,6 +41,7 @@ import { format } from 'date-fns';
 import policiesApi from '@/api/policies';
 import { Policy } from '@/types';
 import { useAppStyles } from '@/hooks/useAppStyles';
+import { utc } from '@/utils/date';
 
 const PolicyList: React.FC = () => {
   const navigate = useNavigate();
@@ -550,7 +551,7 @@ const PolicyList: React.FC = () => {
                     </TableCell>
                     <TableCell sx={tableCellSx}>
                       <Typography sx={{ fontSize: '0.8rem', color: 'text.primary' }}>
-                        {format(new Date(policy.created_at), 'MMM dd, yyyy')}
+                        {format(utc(policy.created_at), 'MMM dd, yyyy')}
                       </Typography>
                     </TableCell>
                     <TableCell align="right" sx={tableCellSx}>
