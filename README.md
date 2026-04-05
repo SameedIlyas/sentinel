@@ -1,4 +1,4 @@
-# Sentinel AI
+# Sentinel AI (Work In Progress)
 
 AI governance platform for securing autonomous AI agents with real-time policy enforcement and visibility.
 
