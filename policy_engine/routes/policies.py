@@ -5,10 +5,9 @@ from sqlalchemy.orm import Session
 from typing import Optional
 import uuid
 from datetime import datetime
-import logging
 
 from policy_engine.database import get_db
-from policy_engine.auth.rbac import authenticate_request
+from policy_engine.auth.api_key import get_current_agent
 from policy_engine.models.policy import Policy
 from policy_engine.models.schemas import (
     PolicyCreate,
@@ -19,16 +18,14 @@ from policy_engine.models.schemas import (
     PolicyValidationResponse
 )
 from policy_engine.services.policy_validator import PolicyValidator
-from policy_engine.services.policy_evaluation import PolicyEvaluationService
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
 
 
 @router.post("", response_model=PolicyResponse, status_code=status.HTTP_201_CREATED)
 async def create_policy(
     policy: PolicyCreate,
-    auth_id: str = Depends(authenticate_request),
+    agent_id: str = Depends(get_current_agent),
     db: Session = Depends(get_db)
 ):
     """
@@ -82,7 +79,7 @@ async def create_policy(
         applies_to=policy.applies_to,
         priority=policy.priority,
         enabled=policy.enabled,
-        created_by=auth_id,
+        created_by=agent_id,
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow()
     )
@@ -91,16 +88,13 @@ async def create_policy(
     db.commit()
     db.refresh(db_policy)
     
-    # Invalidate cache for affected agents
-    _invalidate_policy_cache(db, policy_id)
-    
     return db_policy
 
 
 @router.get("/{policy_id}", response_model=PolicyResponse)
 async def get_policy(
     policy_id: str,
-    auth_id: str = Depends(authenticate_request),
+    agent_id: str = Depends(get_current_agent),
     db: Session = Depends(get_db)
 ):
     """
@@ -132,7 +126,7 @@ async def get_policy(
 async def update_policy(
     policy_id: str,
     policy_update: PolicyUpdate,
-    auth_id: str = Depends(authenticate_request),
+    agent_id: str = Depends(get_current_agent),
     db: Session = Depends(get_db)
 ):
     """
@@ -215,16 +209,13 @@ async def update_policy(
     db.commit()
     db.refresh(db_policy)
     
-    # Invalidate cache for this policy
-    _invalidate_policy_cache(db, policy_id)
-    
     return db_policy
 
 
 @router.delete("/{policy_id}", response_model=PolicyDeleteResponse)
 async def delete_policy(
     policy_id: str,
-    auth_id: str = Depends(authenticate_request),
+    agent_id: str = Depends(get_current_agent),
     db: Session = Depends(get_db)
 ):
     """
@@ -252,9 +243,6 @@ async def delete_policy(
     db.delete(policy)
     db.commit()
     
-    # Invalidate cache for this policy
-    _invalidate_policy_cache(db, policy_id)
-    
     return PolicyDeleteResponse(
         success=True,
         message=f"Policy '{policy.name}' deleted successfully",
@@ -264,7 +252,7 @@ async def delete_policy(
 
 @router.get("", response_model=PolicyListResponse)
 async def list_policies(
-    auth_id: str = Depends(authenticate_request),
+    agent_id: str = Depends(get_current_agent),
     db: Session = Depends(get_db),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
@@ -324,21 +312,3 @@ async def list_policies(
         page_size=page_size,
         total_pages=total_pages
     )
-
-
-def _invalidate_policy_cache(db: Session, policy_id: str) -> None:
-    """
-    Invalidate cache for a policy
-    
-    Args:
-        db: Database session
-        policy_id: Policy ID
-    """
-    try:
-        # Create a temporary evaluation service to access cache
-        eval_service = PolicyEvaluationService(db)
-        invalidated = eval_service.invalidate_cache(policy_id=policy_id)
-        logger.info(f"Invalidated {invalidated} cache entries for policy: {policy_id}")
-    except Exception as e:
-        logger.error(f"Failed to invalidate cache for policy {policy_id}: {e}")
-        # Don't fail the request if cache invalidation fails
