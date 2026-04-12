@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-me-in-production"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
+    MIN_SECRET_KEY_LENGTH: int = 32
+    ALLOWED_AUDIENCES: List[str] = ["sentinel-api"]
 
     # Application environment
     APP_ENV: str = "development"

@@ -83,7 +83,7 @@ def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
             token,
             settings.SECRET_KEY,
             algorithms=[settings.ALGORITHM],
-            options={"verify_aud": False},
+            audience=settings.ALLOWED_AUDIENCES,
         )
         return payload
     except jwt.ExpiredSignatureError:
