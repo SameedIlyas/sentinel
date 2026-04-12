@@ -50,3 +50,6 @@ dmypy.json
 Thumbs.db
 
 .env
+
+# Git worktrees
+.worktrees/
