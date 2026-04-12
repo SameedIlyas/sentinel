@@ -7,6 +7,7 @@ import logging
 
 from policy_engine.models.audit_log import AuditLog
 from policy_engine.database import SessionLocal
+from policy_engine.services.archive_backends import get_archive_backend
 
 logger = logging.getLogger(__name__)
 
@@ -49,41 +50,71 @@ class AuditLogRetentionService:
         return logs
     
     def archive_logs(self, logs: List[AuditLog]) -> Dict[str, Any]:
-        """
-        Archive logs to cold storage
-        
-        In production, this would:
-        1. Upload logs to S3/GCS
-        2. Compress logs for storage efficiency
-        3. Create archive manifest
-        
+        """Archive logs to the configured cold-storage backend.
+
+        PHI fields are stripped by the backend before writing.  Raises on
+        failure — callers must NOT delete logs if this raises.
+
         Args:
-            logs: Logs to archive
-            
+            logs: Logs to archive.
+
         Returns:
-            Archival metadata
+            Archival metadata dict from the backend.
         """
-        # For now, this is a placeholder
-        # In production, integrate with cloud storage (S3, GCS, etc.)
-        
-        archived_count = len(logs)
-        archive_id = f"archive_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
-        
-        logger.info(f"Archiving {archived_count} logs to {archive_id}")
-        
-        # TODO: In production, implement actual cloud storage upload
-        # Example for S3:
-        # s3_client.put_object(
-        #     Bucket='audit-logs-archive',
-        #     Key=f'{archive_id}.json.gz',
-        #     Body=gzip.compress(json.dumps(logs).encode())
-        # )
-        
+        from policy_engine.config import settings  # local import avoids circular dep
+
+        backend = get_archive_backend(settings)
+        result = backend.write(logs)
+
+        logger.info(
+            "Archived %d logs → %s",
+            result.get("archived_count", len(logs)),
+            result.get("storage_location", "unknown"),
+        )
+        return result
+
+    def archive_and_delete(self, db: Session) -> Dict[str, Any]:
+        """Archive eligible logs then delete them from the database.
+
+        Deletion is intentionally placed AFTER a successful archive call.
+        If archive_logs() raises for any reason, delete_archived_logs() is
+        never called, guaranteeing no data loss.
+
+        Args:
+            db: Database session.
+
+        Returns:
+            Execution summary.
+
+        Raises:
+            Any exception raised by archive_logs() propagates to the caller.
+        """
+        logs_to_archive = self.get_logs_for_archival(db)
+
+        if not logs_to_archive:
+            logger.info("No logs eligible for archival.")
+            return {
+                "status": "success",
+                "logs_archived": 0,
+                "logs_deleted": 0,
+                "message": "No logs to archive",
+            }
+
+        # Raises on failure — must NOT proceed to delete if this fails.
+        archive_metadata = self.archive_logs(logs_to_archive)
+
+        deleted_count = self.delete_archived_logs(db, logs_to_archive)
+
+        logger.info(
+            "Retention cycle complete: archived=%d deleted=%d",
+            archive_metadata.get("archived_count", 0),
+            deleted_count,
+        )
         return {
-            "archive_id": archive_id,
-            "archived_count": archived_count,
-            "archived_at": datetime.utcnow().isoformat(),
-            "storage_location": f"s3://audit-logs-archive/{archive_id}.json.gz"
+            "status": "success",
+            "logs_archived": archive_metadata.get("archived_count", 0),
+            "logs_deleted": deleted_count,
+            "archive_metadata": archive_metadata,
         }
     
     def delete_archived_logs(self, db: Session, logs: List[AuditLog]) -> int:

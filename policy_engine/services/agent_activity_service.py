@@ -3,7 +3,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 from policy_engine.models.agent import Agent, AgentStatus
 from policy_engine.models.audit_log import AuditLog
@@ -34,11 +34,11 @@ class AgentActivityService:
         owner_user_id: str = None,
         llm_provider: str = None,
         metadata: Dict[str, Any] = None
-    ) -> Agent:
+    ) -> Tuple[Agent, bool]:
         """
-        Register a new agent or update existing agent's last_active timestamp
-        This is called automatically on every policy check
-        
+        Register a new agent or update existing agent's last_active timestamp.
+        Called automatically on every policy check.
+
         Args:
             db: Database session
             agent_id: Agent identifier
@@ -46,18 +46,19 @@ class AgentActivityService:
             owner_user_id: Owner user ID (optional, defaults to 'system')
             llm_provider: LLM provider (optional)
             metadata: Additional metadata (optional)
-            
+
         Returns:
-            Agent object
+            (agent, is_new) — is_new is True when the agent was just created,
+            False when an existing record was updated.
         """
         agent = db.query(Agent).filter(Agent.id == agent_id).first()
-        
+
         if agent:
             # Update existing agent's last_active
             agent.last_active = datetime.utcnow()
             db.commit()
             db.refresh(agent)
-            return agent
+            return agent, False
         else:
             # Create new agent (auto-registration)
             new_agent = Agent(
@@ -74,7 +75,7 @@ class AgentActivityService:
             db.add(new_agent)
             db.commit()
             db.refresh(new_agent)
-            return new_agent
+            return new_agent, True
     
     @staticmethod
     def get_agent_metrics(db: Session, agent_id: str) -> Dict[str, Any]:

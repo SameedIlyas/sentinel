@@ -1,6 +1,6 @@
 """Agent database model"""
 
-from sqlalchemy import Column, String, DateTime, JSON, Enum
+from sqlalchemy import Column, String, DateTime, JSON, Enum, ForeignKey
 from datetime import datetime
 import enum
 
@@ -40,3 +40,4 @@ class Agent(Base):
     status = Column(Enum(AgentStatus), default=AgentStatus.ACTIVE, nullable=False)
     llm_provider = Column(String, nullable=True)
     agent_metadata = Column('metadata', JSON, default=dict, nullable=False)
+    organization_id = Column(String, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True)

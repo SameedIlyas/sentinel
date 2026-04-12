@@ -1,0 +1,185 @@
+import React, { useState } from 'react';
+import {
+  Box, Typography, Paper, Chip, Table, TableBody, TableCell,
+  TableContainer, TableHead, TableRow, TablePagination, LinearProgress,
+  Alert, Skeleton,
+} from '@mui/material';
+import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+import { useQuery } from '@tanstack/react-query';
+import { listRevenueCycleAudits } from '@/api/healthcare';
+import { RevenueCycleAudit as RevenueCycleAuditType } from '@/types/index';
+
+function riskScoreColor(score: number): 'error' | 'warning' | 'success' {
+  if (score > 70) return 'error';
+  if (score >= 40) return 'warning';
+  return 'success';
+}
+
+function riskScoreBarColor(score: number): string {
+  if (score > 70) return '#df1b41';
+  if (score >= 40) return '#f59e0b';
+  return '#0ea371';
+}
+
+function FlagCell({ count }: { count: number }) {
+  if (count === 0) {
+    return <Typography color="text.secondary">—</Typography>;
+  }
+  return (
+    <Chip
+      label={count}
+      size="small"
+      sx={{ backgroundColor: '#df1b41', color: '#fff', fontWeight: 700 }}
+    />
+  );
+}
+
+function countFlagged(items: RevenueCycleAuditType[]): number {
+  return items.filter(
+    (a) => a.upcoding_flags > 0 || a.unbundling_flags > 0 || a.modifier_flags > 0
+  ).length;
+}
+
+const RevenueCycleAudit: React.FC = () => {
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['revenueCycleAudits', page],
+    queryFn: () => listRevenueCycleAudits({ page: page + 1 }),
+  });
+
+  const handleChangePage = (_: unknown, newPage: number) => setPage(newPage);
+  const handleChangeRowsPerPage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setRowsPerPage(parseInt(e.target.value, 10));
+    setPage(0);
+  };
+
+  const flaggedCount = data ? countFlagged(data.items) : 0;
+  const cleanCount = data ? data.items.length - flaggedCount : 0;
+
+  return (
+    <Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
+        <AttachMoneyIcon sx={{ color: 'primary.main', fontSize: 28 }} />
+        <Box>
+          <Typography variant="h4">Revenue Cycle Integrity</Typography>
+          <Typography variant="body2" color="text.secondary">
+            AI-assisted billing audit — upcoding, unbundling, and modifier flag detection
+          </Typography>
+        </Box>
+      </Box>
+
+      {isError && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          Failed to load revenue cycle audit data. Please try again.
+        </Alert>
+      )}
+
+      <Box sx={{ display: 'flex', gap: 1.5, mb: 3, flexWrap: 'wrap' }}>
+        {isLoading ? (
+          [0, 1, 2].map((i) => <Skeleton key={i} variant="rounded" width={120} height={32} />)
+        ) : data ? (
+          <>
+            <Chip label={`Total Audited: ${data.total}`} variant="outlined" />
+            <Chip
+              label={`Flagged: ${flaggedCount}`}
+              sx={{ backgroundColor: flaggedCount > 0 ? '#df1b41' : undefined, color: flaggedCount > 0 ? '#fff' : undefined }}
+            />
+            <Chip
+              label={`Clean: ${cleanCount}`}
+              sx={{ backgroundColor: '#0ea371', color: '#fff' }}
+            />
+          </>
+        ) : null}
+      </Box>
+
+      <Paper>
+        <TableContainer>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Claim ID</TableCell>
+                <TableCell>Risk Score</TableCell>
+                <TableCell>Upcoding</TableCell>
+                <TableCell>Unbundling</TableCell>
+                <TableCell>Modifier</TableCell>
+                <TableCell>Recommendation</TableCell>
+                <TableCell>Audited At</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {isLoading ? (
+                [0, 1, 2, 3, 4].map((i) => (
+                  <TableRow key={i}>
+                    {[0, 1, 2, 3, 4, 5, 6].map((j) => (
+                      <TableCell key={j}><Skeleton variant="text" /></TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : !data || data.items.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
+                    <Typography color="text.secondary">No audit records found</Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                data.items.map((audit) => {
+                  const scoreColor = riskScoreColor(audit.risk_score);
+                  const barColor = riskScoreBarColor(audit.risk_score);
+                  return (
+                    <TableRow key={audit.id} hover>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                        {audit.claim_id}
+                      </TableCell>
+                      <TableCell sx={{ minWidth: 140 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <LinearProgress
+                            variant="determinate"
+                            value={Math.min(audit.risk_score, 100)}
+                            color={scoreColor}
+                            sx={{
+                              flex: 1, height: 8, borderRadius: 4,
+                              '& .MuiLinearProgress-bar': { backgroundColor: barColor },
+                            }}
+                          />
+                          <Typography variant="caption" sx={{ minWidth: 28 }}>
+                            {audit.risk_score}
+                          </Typography>
+                        </Box>
+                      </TableCell>
+                      <TableCell><FlagCell count={audit.upcoding_flags} /></TableCell>
+                      <TableCell><FlagCell count={audit.unbundling_flags} /></TableCell>
+                      <TableCell><FlagCell count={audit.modifier_flags} /></TableCell>
+                      <TableCell sx={{ maxWidth: 220 }}>
+                        <Typography variant="body2" noWrap title={audit.recommendation}>
+                          {audit.recommendation.length > 50
+                            ? audit.recommendation.slice(0, 50) + '…'
+                            : audit.recommendation}
+                        </Typography>
+                      </TableCell>
+                      <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                        {new Date(audit.audited_at).toLocaleDateString()}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+        <TablePagination
+          rowsPerPageOptions={[10, 25, 50]}
+          component="div"
+          count={data?.total ?? 0}
+          rowsPerPage={rowsPerPage}
+          page={page}
+          onPageChange={handleChangePage}
+          onRowsPerPageChange={handleChangeRowsPerPage}
+        />
+      </Paper>
+    </Box>
+  );
+};
+
+export default RevenueCycleAudit;

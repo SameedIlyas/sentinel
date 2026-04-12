@@ -10,9 +10,15 @@ from policy_engine.models.schemas import UserLogin, TokenResponse, UserResponse
 from policy_engine.auth.jwt_utils import (
     verify_password,
     create_access_token,
-    get_token_expiration_time
+    get_token_expiration_time,
+    decode_access_token,
 )
 from policy_engine.auth.rbac import get_current_user
+from policy_engine.services.token_blacklist import get_token_blacklist
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from typing import Optional
+
+_security = HTTPBearer(auto_error=False)
 
 router = APIRouter()
 
@@ -96,24 +102,21 @@ async def login(
 
 @router.post("/logout", status_code=status.HTTP_200_OK)
 async def logout(
-    current_user: User = Depends(get_current_user)
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_security),
+    current_user: User = Depends(get_current_user),
 ):
-    """
-    Logout current user
-    
-    This endpoint is provided for consistency, but JWT tokens are stateless.
-    The client should discard the token on logout. To truly invalidate a token,
-    implement a token blacklist (future enhancement).
-    
-    Args:
-        current_user: Current authenticated user
-        
-    Returns:
-        Success message
-    """
+    """Logout current user and invalidate the JWT token."""
+    if credentials is not None:
+        payload = decode_access_token(credentials.credentials)
+        if payload and "jti" in payload:
+            from datetime import datetime
+            exp = payload.get("exp")
+            remaining = max(0, int(exp - datetime.utcnow().timestamp())) if exp else 3600
+            get_token_blacklist().add(payload["jti"], expires_in_seconds=remaining)
+
     return {
         "message": "Successfully logged out",
-        "username": current_user.username
+        "username": current_user.username,
     }
 
 

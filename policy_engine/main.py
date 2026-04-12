@@ -8,10 +8,41 @@ import sys
 from contextlib import asynccontextmanager
 
 from policy_engine.config import settings
+from policy_engine.auth.jwt_utils import validate_secret_key_for_production
 from policy_engine.middleware.logging import LoggingMiddleware
 from policy_engine.middleware.error_handler import ErrorHandlerMiddleware
 from policy_engine.middleware.rate_limiter import RateLimitMiddleware
-from policy_engine.routes import health, agents, policies, policy_check, audit, alerts, auth, users, dashboard, websocket, cache
+from policy_engine.middleware.csrf import CSRFMiddleware
+from policy_engine.middleware.tenant_context import TenantContextMiddleware
+from policy_engine.routes import health, agents, policies, policy_check, audit, alerts, auth, users, dashboard, websocket, cache, organizations
+from policy_engine.routes import phi
+from policy_engine.routes.clinical import model_cards as clinical_model_cards
+from policy_engine.routes.clinical import bias_audits as clinical_bias_audits
+from policy_engine.routes.clinical import drift as clinical_drift
+from policy_engine.routes.clinical import hitl as clinical_hitl
+from policy_engine.routes.admin import shadow_ai as admin_shadow_ai
+from policy_engine.routes.admin import scribe_audits as admin_scribe_audits
+from policy_engine.routes.admin import transparency as admin_transparency
+from policy_engine.routes.finance import prior_auth as finance_prior_auth
+from policy_engine.routes.finance import revenue_cycle as finance_revenue_cycle
+from policy_engine.routes.regulatory import technical_files as regulatory_technical_files
+from policy_engine.routes.regulatory import adverse_events as regulatory_adverse_events
+from policy_engine.routes.regulatory import pms_reports as regulatory_pms_reports
+from policy_engine.routes.regulatory import risk_scores as regulatory_risk_scores
+
+# Import clinical models so they are registered with Base
+from policy_engine.models import model_card, bias_audit, drift, hitl  # noqa: F401
+# Import admin governance models so they are registered with Base
+from policy_engine.models import shadow_ai as shadow_ai_models  # noqa: F401
+from policy_engine.models import scribe_audit as scribe_audit_models  # noqa: F401
+from policy_engine.models import transparency as transparency_models  # noqa: F401
+# Import finance models so they are registered with Base
+from policy_engine.models import prior_auth as prior_auth_models  # noqa: F401
+from policy_engine.models import revenue_cycle as revenue_cycle_models  # noqa: F401
+# Import regulatory models so they are registered with Base
+from policy_engine.models import technical_file as technical_file_models  # noqa: F401
+from policy_engine.models import post_market as post_market_models  # noqa: F401
+from policy_engine.models import risk_score as risk_score_models  # noqa: F401
 
 # Configure logging
 logging.basicConfig(
@@ -28,6 +59,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
+    validate_secret_key_for_production(settings.APP_ENV, settings.SECRET_KEY)
     logger.info("Starting Policy Engine service...")
     yield
     logger.info("Shutting down Policy Engine service...")
@@ -42,7 +74,9 @@ app = FastAPI(
 )
 
 # Add custom middleware (added first = runs innermost)
+app.add_middleware(TenantContextMiddleware)
 app.add_middleware(RateLimitMiddleware)
+app.add_middleware(CSRFMiddleware)
 app.add_middleware(ErrorHandlerMiddleware)
 app.add_middleware(LoggingMiddleware)
 
@@ -50,7 +84,7 @@ app.add_middleware(LoggingMiddleware)
 # ensuring CORS headers are present on ALL responses including errors.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -68,6 +102,21 @@ app.include_router(policy_check.router, prefix="/v1/policy", tags=["policy-evalu
 app.include_router(audit.router, prefix="/v1/audit", tags=["audit"])
 app.include_router(alerts.router, prefix="/v1/alerts", tags=["alerts"])
 app.include_router(cache.router, prefix="/v1/cache", tags=["cache"])
+app.include_router(organizations.router, prefix="/v1/organizations", tags=["organizations"])
+app.include_router(phi.router, prefix="/v1/phi", tags=["phi"])
+app.include_router(clinical_model_cards.router, prefix="/v1/clinical", tags=["clinical-model-cards"])
+app.include_router(clinical_bias_audits.router, prefix="/v1/clinical", tags=["clinical-bias-audits"])
+app.include_router(clinical_drift.router, prefix="/v1/clinical", tags=["clinical-drift"])
+app.include_router(clinical_hitl.router, prefix="/v1/clinical", tags=["clinical-hitl"])
+app.include_router(admin_shadow_ai.router, prefix="/v1/admin", tags=["admin-shadow-ai"])
+app.include_router(admin_scribe_audits.router, prefix="/v1/admin", tags=["admin-scribe-audits"])
+app.include_router(admin_transparency.router, prefix="/v1", tags=["transparency"])
+app.include_router(finance_prior_auth.router, prefix="/v1/finance", tags=["finance-prior-auth"])
+app.include_router(finance_revenue_cycle.router, prefix="/v1/finance", tags=["finance-revenue-cycle"])
+app.include_router(regulatory_technical_files.router, prefix="/v1/regulatory", tags=["regulatory-technical-files"])
+app.include_router(regulatory_adverse_events.router, prefix="/v1/regulatory", tags=["regulatory-adverse-events"])
+app.include_router(regulatory_pms_reports.router, prefix="/v1/regulatory", tags=["regulatory-pms-reports"])
+app.include_router(regulatory_risk_scores.router, prefix="/v1", tags=["risk-scoring"])
 
 
 @app.get("/")

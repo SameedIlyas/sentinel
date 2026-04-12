@@ -166,21 +166,23 @@ const Login: React.FC = () => {
             </Button>
           </form>
 
-          <Box
-            sx={{
-              mt: 2.5,
-              p: 1.75,
-              borderRadius: '6px',
-              bgcolor: dark ? 'rgba(255,255,255,0.025)' : 'rgba(0,0,0,0.02)',
-              border: `1px solid ${theme.palette.divider}`,
-            }}
-          >
-            <Typography sx={{ color: 'text.secondary', fontSize: '0.6875rem' }}>
-              <span style={{ fontWeight: 600, color: theme.palette.text.primary }}>Dev credentials</span>
-              <br />
-              admin / admin123
-            </Typography>
-          </Box>
+          {import.meta.env.DEV && (
+            <Box
+              sx={{
+                mt: 2.5,
+                p: 1.75,
+                borderRadius: '6px',
+                bgcolor: dark ? 'rgba(255,255,255,0.025)' : 'rgba(0,0,0,0.02)',
+                border: `1px solid ${theme.palette.divider}`,
+              }}
+            >
+              <Typography sx={{ color: 'text.secondary', fontSize: '0.6875rem' }}>
+                <span style={{ fontWeight: 600, color: theme.palette.text.primary }}>Dev credentials</span>
+                <br />
+                admin / admin123
+              </Typography>
+            </Box>
+          )}
         </CardContent>
       </Card>
 

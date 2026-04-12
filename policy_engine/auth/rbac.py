@@ -39,6 +39,17 @@ def get_current_user(
             detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # Check token blacklist (logout invalidation)
+    jti = payload.get("jti")
+    if jti:
+        from policy_engine.services.token_blacklist import get_token_blacklist
+        if get_token_blacklist().is_blacklisted(jti):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has been revoked",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
     
     user_id = payload.get("user_id")
     if user_id is None:
@@ -173,3 +184,14 @@ def get_analyst_or_admin(current_user: User = Depends(get_current_user)) -> User
             detail="Analyst or administrator privileges required"
         )
     return current_user
+
+
+def get_current_user_optional(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    db: Session = Depends(get_db),
+) -> Optional[User]:
+    """Returns None instead of raising 401 — for public endpoints."""
+    try:
+        return get_current_user(credentials=credentials, db=db)
+    except HTTPException:
+        return None

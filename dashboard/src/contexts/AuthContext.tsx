@@ -16,64 +16,134 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 };
 
-interface AuthProviderProps {
-  children: ReactNode;
-}
-
-// Permission matrix matching backend ROLE_PERMISSIONS
+// Permission matrix — mirrors backend ROLE_PERMISSIONS
 const ROLE_PERMISSIONS: Record<UserRole, Record<string, string[]>> = {
+  [UserRole.SYSTEM_ADMIN]: {
+    policies: ['create', 'read', 'update', 'delete'],
+    agents: ['create', 'read', 'update', 'delete'],
+    audit_logs: ['read', 'export'],
+    alerts: ['create', 'read', 'update', 'acknowledge', 'configure'],
+    users: ['create', 'read', 'update', 'delete'],
+    organizations: ['create', 'read', 'update', 'delete'],
+    model_cards: ['create', 'read', 'update', 'delete'],
+    bias_audits: ['create', 'read', 'update', 'delete'],
+    drift_detection: ['create', 'read', 'update', 'delete'],
+    hitl_reviews: ['create', 'read', 'update', 'delete'],
+    shadow_ai: ['create', 'read', 'update', 'delete'],
+    scribe_audits: ['create', 'read', 'update', 'delete'],
+    transparency: ['create', 'read', 'update', 'delete'],
+    prior_auth: ['create', 'read', 'update', 'delete'],
+    revenue_cycle: ['create', 'read', 'update', 'delete'],
+    technical_files: ['create', 'read', 'update', 'delete'],
+    post_market: ['create', 'read', 'update', 'delete'],
+    risk_scores: ['create', 'read', 'update', 'delete'],
+  },
   [UserRole.ADMIN]: {
     policies: ['create', 'read', 'update', 'delete'],
     agents: ['create', 'read', 'update', 'delete'],
     audit_logs: ['read', 'export'],
-    alerts: ['read', 'acknowledge'],
+    alerts: ['create', 'read', 'update', 'acknowledge', 'configure'],
     users: ['create', 'read', 'update', 'delete'],
-    system: ['configure'],
+    model_cards: ['create', 'read', 'update', 'delete'],
+    bias_audits: ['create', 'read', 'update'],
+    drift_detection: ['read', 'update'],
+    hitl_reviews: ['create', 'read', 'update'],
+    shadow_ai: ['read'],
+    scribe_audits: ['read'],
+    transparency: ['read'],
+    prior_auth: ['create', 'read', 'update'],
+    revenue_cycle: ['read'],
+    technical_files: ['create', 'read', 'update'],
+    post_market: ['read'],
+    risk_scores: ['create', 'read', 'update', 'delete'],
+  },
+  [UserRole.CMIO]: {
+    policies: ['create', 'read', 'update'],
+    agents: ['read', 'update'],
+    audit_logs: ['read', 'export'],
+    alerts: ['read', 'acknowledge'],
+    users: ['read'],
+    model_cards: ['create', 'read', 'update'],
+    bias_audits: ['read'],
+    drift_detection: ['read'],
+    hitl_reviews: ['create', 'read', 'update'],
+    risk_scores: ['read'],
+    transparency: ['read'],
+  },
+  [UserRole.DATA_SCIENTIST]: {
+    policies: ['read'],
+    agents: ['read'],
+    audit_logs: ['read'],
+    alerts: ['read'],
+    model_cards: ['create', 'read', 'update'],
+    bias_audits: ['create', 'read', 'update'],
+    drift_detection: ['create', 'read', 'update'],
+    risk_scores: ['create', 'read', 'update'],
+    technical_files: ['create', 'read', 'update'],
+  },
+  [UserRole.COMPLIANCE_OFFICER]: {
+    policies: ['read', 'update'],
+    agents: ['read'],
+    audit_logs: ['read', 'export'],
+    alerts: ['read', 'acknowledge'],
+    users: ['read'],
+    model_cards: ['read'],
+    bias_audits: ['read'],
+    drift_detection: ['read'],
+    transparency: ['read'],
+    post_market: ['read'],
+    risk_scores: ['read'],
+    technical_files: ['read'],
+    prior_auth: ['read'],
+    revenue_cycle: ['read'],
+  },
+  [UserRole.CLINICAL_USER]: {
+    policies: ['read'],
+    agents: ['read'],
+    audit_logs: ['read'],
+    alerts: ['read'],
+    hitl_reviews: ['create', 'read', 'update'],
+    prior_auth: ['create', 'read'],
+    risk_scores: ['read'],
+    scribe_audits: ['read'],
+    shadow_ai: ['read'],
   },
   [UserRole.ANALYST]: {
     policies: ['read'],
     agents: ['read'],
     audit_logs: ['read', 'export'],
     alerts: ['read', 'acknowledge'],
-    users: [],
-    system: [],
+    risk_scores: ['read'],
   },
   [UserRole.VIEWER]: {
     policies: ['read'],
     agents: ['read'],
     audit_logs: ['read'],
     alerts: ['read'],
-    users: [],
-    system: [],
   },
 };
 
-export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check if user is already authenticated on mount
     const initAuth = async () => {
       try {
         if (apiClient.isAuthenticated()) {
           const currentUser = await apiClient.validateToken();
           setUser(currentUser);
         }
-      } catch (error) {
-        console.error('Failed to validate token:', error);
+      } catch {
         setUser(null);
       } finally {
         setIsLoading(false);
       }
     };
-
     initAuth();
   }, []);
 
@@ -99,26 +169,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const hasRole = (roles: UserRole | UserRole[]): boolean => {
     if (!user) return false;
-    const roleArray = Array.isArray(roles) ? roles : [roles];
-    return roleArray.includes(user.role);
+    const arr = Array.isArray(roles) ? roles : [roles];
+    return arr.includes(user.role);
   };
 
   const hasPermission = (resource: string, action: string): boolean => {
     if (!user) return false;
-    const permissions = ROLE_PERMISSIONS[user.role];
-    if (!permissions || !permissions[resource]) return false;
-    return permissions[resource].includes(action);
+    const perms = ROLE_PERMISSIONS[user.role];
+    return perms?.[resource]?.includes(action) ?? false;
   };
 
-  const value: AuthContextType = {
-    user,
-    isAuthenticated: !!user,
-    isLoading,
-    login,
-    logout,
-    hasRole,
-    hasPermission,
-  };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, login, logout, hasRole, hasPermission }}>
+      {children}
+    </AuthContext.Provider>
+  );
 };

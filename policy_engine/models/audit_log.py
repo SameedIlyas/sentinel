@@ -1,6 +1,6 @@
 """Audit log database model"""
 
-from sqlalchemy import Column, String, DateTime, JSON, Enum
+from sqlalchemy import Column, String, DateTime, JSON, Enum, ForeignKey
 from datetime import datetime
 import enum
 
@@ -49,3 +49,4 @@ class AuditLog(Base):
     policy_ids = Column(JSON, nullable=False)  # List of policy IDs
     reason = Column(String, nullable=False)
     log_metadata = Column('metadata', JSON, default=dict, nullable=False)
+    organization_id = Column(String, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True)

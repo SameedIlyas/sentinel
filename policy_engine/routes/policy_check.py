@@ -77,28 +77,31 @@ def trigger_alert(
     db: Session,
     request: PolicyCheckRequest,
     response: PolicyCheckResponse,
-    audit_log_id: Optional[str] = None
+    audit_log_id: Optional[str] = None,
+    is_new_agent: bool = False,
 ):
     """
-    Trigger alerts based on policy check results
-    
+    Trigger alerts based on policy check results.
+
     Args:
         db: Database session
         request: Policy check request
         response: Policy check response
         audit_log_id: Related audit log ID
+        is_new_agent: True when the agent was just auto-registered for the first time
     """
     try:
         alert_service = AlertService(db)
-        
+
         # Determine if alert should be triggered
         if not alert_service.should_trigger_alert(
             decision=response.decision,
-            is_new_agent=False  # TODO: Track new agent detection
+            is_new_agent=is_new_agent,
         ):
             return
-        
+
         # Determine policy type from response (check first policy ID)
+        first_policy = None
         policy_type = None
         if response.policy_ids:
             from policy_engine.models.policy import Policy
@@ -110,19 +113,19 @@ def trigger_alert(
                     policy_type = PolicyType(first_policy.policy_type)
                 except ValueError:
                     pass
-        
+
         # Classify severity and determine alert type
         severity = alert_service.classify_severity(
             policy_type=policy_type if policy_type else PolicyType.ACCESS_CONTROL,
             decision=response.decision,
-            is_new_agent=False
+            is_new_agent=is_new_agent,
         )
-        
+
         alert_type = alert_service.determine_alert_type(
             policy_type=policy_type if policy_type else PolicyType.ACCESS_CONTROL,
             decision=response.decision,
             tool_name=request.tool_name,
-            is_new_agent=False
+            is_new_agent=is_new_agent,
         )
         
         if not alert_type:
@@ -225,7 +228,7 @@ async def check_policy(
             )
         
         # Register or update agent activity (auto-registration on first SDK call)
-        AgentActivityService.register_or_update_agent(
+        _agent_obj, is_new_agent = AgentActivityService.register_or_update_agent(
             db=db,
             agent_id=agent_id,
             agent_name=request.context.get('agent_name') if request.context else None,
@@ -233,7 +236,7 @@ async def check_policy(
             llm_provider=request.context.get('llm_provider') if request.context else None,
             metadata=request.context or {}
         )
-        
+
         # Initialize policy evaluation service
         evaluation_service = PolicyEvaluationService(db)
         
@@ -245,8 +248,8 @@ async def check_policy(
         audit_log_id = create_audit_log(db, request, response)
         
         # Trigger alerts for policy violations
-        trigger_alert(db, request, response, audit_log_id)
-        
+        trigger_alert(db, request, response, audit_log_id, is_new_agent=is_new_agent)
+
         # Log the decision
         logger.info(
             f"Policy decision for agent={request.agent_id}, tool={request.tool_name}: "
@@ -273,8 +276,8 @@ async def check_policy(
         audit_log_id = create_audit_log(db, request, error_response)
         
         # Trigger alerts for error-induced blocks
-        trigger_alert(db, request, error_response, audit_log_id)
-        
+        trigger_alert(db, request, error_response, audit_log_id, is_new_agent=is_new_agent)
+
         return error_response
 
 
@@ -318,9 +321,10 @@ async def check_policies_batch(
             )
     
     # Register or update agent activity (use first request for metadata)
+    is_new_agent = False
     if requests:
         first_request = requests[0]
-        AgentActivityService.register_or_update_agent(
+        _agent_obj, is_new_agent = AgentActivityService.register_or_update_agent(
             db=db,
             agent_id=agent_id,
             agent_name=first_request.context.get('agent_name') if first_request.context else None,
@@ -343,8 +347,8 @@ async def check_policies_batch(
             audit_log_id = create_audit_log(db, request, response)
             
             # Trigger alerts for policy violations
-            trigger_alert(db, request, response, audit_log_id)
-            
+            trigger_alert(db, request, response, audit_log_id, is_new_agent=is_new_agent)
+
         except Exception as e:
             logger.error(f"Batch evaluation error for tool={request.tool_name}: {str(e)}")
             # Fail-safe for individual request
@@ -356,10 +360,10 @@ async def check_policies_batch(
                 metadata={'error': str(e), 'fail_safe': True}
             )
             responses.append(error_response)
-            
+
             # Log the error response and trigger alerts
             audit_log_id = create_audit_log(db, request, error_response)
-            trigger_alert(db, request, error_response, audit_log_id)
+            trigger_alert(db, request, error_response, audit_log_id, is_new_agent=is_new_agent)
     
     return responses
 

@@ -31,8 +31,18 @@ class Settings(BaseSettings):
     # Security
     SECRET_KEY: str = "change-me-in-production"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
+
+    # Application environment
+    APP_ENV: str = "development"
+
+    # Audit log archival
+    ARCHIVE_BACKEND: str = "local"          # "local" | "s3"
+    ARCHIVE_LOCAL_PATH: str = ""            # required when ARCHIVE_BACKEND=local
+    ARCHIVE_S3_BUCKET: str = ""             # required when ARCHIVE_BACKEND=s3
+    ARCHIVE_S3_PREFIX: str = "audit-logs/"
+    ARCHIVE_S3_KMS_KEY_ID: str = ""         # KMS key ARN/alias; empty = bucket default
+
     class Config:
         env_file = ".env"
         case_sensitive = True

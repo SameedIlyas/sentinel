@@ -1,31 +1,71 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { ThemeProvider, createTheme, CssBaseline, alpha, type PaletteMode } from '@mui/material';
+import {
+  ThemeProvider, createTheme, CssBaseline, alpha, CircularProgress, Box,
+  type PaletteMode,
+} from '@mui/material';
 import { ThemeModeProvider, useThemeMode } from '@/contexts/ThemeContext';
 import { AuthProvider } from '@/contexts/AuthContext';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import Login from '@/components/auth/Login';
 import AppLayout from '@/components/layout/AppLayout';
-import Dashboard from '@/pages/Dashboard';
-import AgentList from '@/pages/AgentList';
-import AgentDetail from '@/pages/AgentDetail';
-import PolicyList from '@/pages/PolicyList';
-import PolicyEditor from '@/pages/PolicyEditor';
-import AuditLogs from '@/pages/AuditLogs';
-import Alerts from '@/pages/Alerts';
-import Users from '@/pages/Users';
 import { UserRole } from '@/types';
 
+// ── Eager-loaded core pages (above the fold, small bundle impact) ──
+import Dashboard from '@/pages/Dashboard';
+
+// ── Lazy-loaded pages ──
+// Core
+const AgentList          = React.lazy(() => import('@/pages/AgentList'));
+const AgentDetail        = React.lazy(() => import('@/pages/AgentDetail'));
+const PolicyList         = React.lazy(() => import('@/pages/PolicyList'));
+const PolicyEditor       = React.lazy(() => import('@/pages/PolicyEditor'));
+const AuditLogs          = React.lazy(() => import('@/pages/AuditLogs'));
+const Alerts             = React.lazy(() => import('@/pages/Alerts'));
+const Users              = React.lazy(() => import('@/pages/Users'));
+
+// Clinical Governance
+const ModelCardList      = React.lazy(() => import('@/pages/clinical/ModelCardList'));
+const ModelCardEditor    = React.lazy(() => import('@/pages/clinical/ModelCardEditor'));
+const BiasAuditDetail    = React.lazy(() => import('@/pages/clinical/BiasAuditDetail'));
+const DriftMonitor       = React.lazy(() => import('@/pages/clinical/DriftMonitor'));
+const HITLQueue          = React.lazy(() => import('@/pages/clinical/HITLQueue'));
+const HITLReviewDetail   = React.lazy(() => import('@/pages/clinical/HITLReviewDetail'));
+
+// Admin Governance
+const ShadowAIDiscovery  = React.lazy(() => import('@/pages/admin/ShadowAIDiscovery'));
+const ScribeAuditList    = React.lazy(() => import('@/pages/admin/ScribeAuditList'));
+const TransparencyPortal = React.lazy(() => import('@/pages/admin/TransparencyPortal'));
+
+// Financial
+const PriorAuthTrail     = React.lazy(() => import('@/pages/finance/PriorAuthTrail'));
+const RevenueCycleAudit  = React.lazy(() => import('@/pages/finance/RevenueCycleAudit'));
+
+// Regulatory
+const TechnicalFiles          = React.lazy(() => import('@/pages/regulatory/TechnicalFiles'));
+const AdverseEvents           = React.lazy(() => import('@/pages/regulatory/AdverseEvents'));
+const PostMarketSurveillance  = React.lazy(() => import('@/pages/regulatory/PostMarketSurveillance'));
+
+// Risk
+const RiskPortfolio      = React.lazy(() => import('@/pages/risk/RiskPortfolio'));
+const RiskScoreDetail    = React.lazy(() => import('@/pages/risk/RiskScoreDetail'));
+
+// Settings
+const OrganizationSettings = React.lazy(() => import('@/pages/settings/OrganizationSettings'));
+const RiskConfiguration    = React.lazy(() => import('@/pages/settings/RiskConfiguration'));
+const HIPAAConfiguration   = React.lazy(() => import('@/pages/settings/HIPAAConfiguration'));
+
+// ── Design tokens ──────────────────────────────────────────────────
 const ACCENT = { main: '#635bff', light: '#7a73ff', dark: '#5046e5' };
 
 function buildTheme(mode: PaletteMode) {
   const dark = mode === 'dark';
 
-  const bg   = dark ? { default: '#0a0a0c', paper: '#111114' } : { default: '#f6f8fa', paper: '#ffffff' };
-  const text = dark ? { primary: '#f0f2f5', secondary: '#8b8fa3' } : { primary: '#1a1f36', secondary: '#697386' };
-  const border = dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.08)';
-  const hoverBg = dark ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.03)';
-  const surfaceHover = dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.015)';
+  const bg          = dark ? { default: '#0a0a0c', paper: '#111114' } : { default: '#f6f8fa', paper: '#ffffff' };
+  const text        = dark ? { primary: '#f0f2f5', secondary: '#8b8fa3' } : { primary: '#1a1f36', secondary: '#697386' };
+  const border      = dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.08)';
+  const hoverBg     = dark ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.03)';
+  const surfaceHover= dark ? 'rgba(255,255,255,0.05)'  : 'rgba(0,0,0,0.015)';
   const scrollThumb = dark ? '#2a2a2e' : '#c8c8cc';
   const scrollHover = dark ? '#3f3f44' : '#a0a0a6';
 
@@ -34,10 +74,10 @@ function buildTheme(mode: PaletteMode) {
       mode,
       primary: ACCENT,
       secondary: { main: '#a78bfa', light: '#c4b5fd', dark: '#7c3aed' },
-      success: { main: '#0ea371', light: '#3ecf8e', dark: '#067a55' },
-      warning: { main: '#e87f17', light: '#f5a623', dark: '#c26a0a' },
-      error: { main: '#df1b41', light: '#f04662', dark: '#b31535' },
-      info: { main: '#3b82f6', light: '#60a5fa', dark: '#2563eb' },
+      success:   { main: '#0ea371', light: '#3ecf8e', dark: '#067a55' },
+      warning:   { main: '#e87f17', light: '#f5a623', dark: '#c26a0a' },
+      error:     { main: '#df1b41', light: '#f04662', dark: '#b31535' },
+      info:      { main: '#3b82f6', light: '#60a5fa', dark: '#2563eb' },
       background: bg,
       text,
       divider: border,
@@ -45,26 +85,26 @@ function buildTheme(mode: PaletteMode) {
     typography: {
       fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
       h1: { fontWeight: 700, letterSpacing: '-0.025em', fontSize: '2rem' },
-      h2: { fontWeight: 700, letterSpacing: '-0.02em', fontSize: '1.5rem' },
-      h3: { fontWeight: 600, letterSpacing: '-0.02em', fontSize: '1.25rem' },
+      h2: { fontWeight: 700, letterSpacing: '-0.02em',  fontSize: '1.5rem' },
+      h3: { fontWeight: 600, letterSpacing: '-0.02em',  fontSize: '1.25rem' },
       h4: { fontWeight: 600, letterSpacing: '-0.015em', fontSize: '1.125rem' },
-      h5: { fontWeight: 600, letterSpacing: '-0.01em', fontSize: '1rem' },
+      h5: { fontWeight: 600, letterSpacing: '-0.01em',  fontSize: '1rem' },
       h6: { fontWeight: 600, fontSize: '0.875rem' },
       subtitle1: { fontWeight: 500, fontSize: '0.9375rem', color: text.secondary },
       subtitle2: { fontWeight: 500, fontSize: '0.8125rem', color: text.secondary },
-      body1: { fontSize: '0.875rem', lineHeight: 1.65, color: text.primary },
-      body2: { fontSize: '0.8125rem', lineHeight: 1.55, color: text.secondary },
-      caption: { fontSize: '0.6875rem', letterSpacing: '0.02em', color: text.secondary },
-      button: { fontWeight: 600, fontSize: '0.8125rem', letterSpacing: '0.01em' },
+      body1:     { fontSize: '0.875rem',   lineHeight: 1.65, color: text.primary },
+      body2:     { fontSize: '0.8125rem',  lineHeight: 1.55, color: text.secondary },
+      caption:   { fontSize: '0.6875rem',  letterSpacing: '0.02em', color: text.secondary },
+      button:    { fontWeight: 600, fontSize: '0.8125rem', letterSpacing: '0.01em' },
     },
     shape: { borderRadius: 8 },
     components: {
       MuiCssBaseline: {
         styleOverrides: {
           body: { backgroundColor: bg.default },
-          '::-webkit-scrollbar': { width: 6, height: 6 },
-          '::-webkit-scrollbar-track': { background: 'transparent' },
-          '::-webkit-scrollbar-thumb': { background: scrollThumb, borderRadius: 3 },
+          '::-webkit-scrollbar':        { width: 6, height: 6 },
+          '::-webkit-scrollbar-track':  { background: 'transparent' },
+          '::-webkit-scrollbar-thumb':  { background: scrollThumb, borderRadius: 3 },
           '::-webkit-scrollbar-thumb:hover': { background: scrollHover },
         },
       },
@@ -131,12 +171,7 @@ function buildTheme(mode: PaletteMode) {
       },
       MuiTableCell: {
         styleOverrides: {
-          root: {
-            borderBottom: `1px solid ${border}`,
-            padding: '12px 16px',
-            fontSize: '0.8125rem',
-            color: text.primary,
-          },
+          root: { borderBottom: `1px solid ${border}`, padding: '12px 16px', fontSize: '0.8125rem', color: text.primary },
           head: {
             fontWeight: 600,
             color: text.secondary,
@@ -158,9 +193,7 @@ function buildTheme(mode: PaletteMode) {
         },
       },
       MuiChip: {
-        styleOverrides: {
-          root: { fontWeight: 500, fontSize: '0.6875rem', borderRadius: 6, height: 24 },
-        },
+        styleOverrides: { root: { fontWeight: 500, fontSize: '0.6875rem', borderRadius: 6, height: 24 } },
       },
       MuiTextField: {
         styleOverrides: {
@@ -203,9 +236,9 @@ function buildTheme(mode: PaletteMode) {
       MuiAlert: {
         styleOverrides: {
           root: { borderRadius: 8, border: '1px solid', fontSize: '0.8125rem' },
-          standardError: { backgroundColor: alpha('#df1b41', dark ? 0.08 : 0.04), borderColor: alpha('#df1b41', 0.2), color: dark ? '#f8a4b8' : '#9e1234' },
+          standardError:   { backgroundColor: alpha('#df1b41', dark ? 0.08 : 0.04), borderColor: alpha('#df1b41', 0.2), color: dark ? '#f8a4b8' : '#9e1234' },
           standardWarning: { backgroundColor: alpha('#e87f17', dark ? 0.08 : 0.04), borderColor: alpha('#e87f17', 0.2), color: dark ? '#fcc57a' : '#8a4d0a' },
-          standardInfo: { backgroundColor: alpha('#3b82f6', dark ? 0.08 : 0.04), borderColor: alpha('#3b82f6', 0.2), color: dark ? '#93c5fd' : '#1e4fad' },
+          standardInfo:    { backgroundColor: alpha('#3b82f6', dark ? 0.08 : 0.04), borderColor: alpha('#3b82f6', 0.2), color: dark ? '#93c5fd' : '#1e4fad' },
           standardSuccess: { backgroundColor: alpha('#0ea371', dark ? 0.08 : 0.04), borderColor: alpha('#0ea371', 0.2), color: dark ? '#6ee7b7' : '#065f46' },
         },
       },
@@ -233,7 +266,9 @@ function buildTheme(mode: PaletteMode) {
         styleOverrides: { root: { borderRadius: 6, '&:hover': { backgroundColor: hoverBg } } },
       },
       MuiTablePagination: {
-        styleOverrides: { root: { borderTop: `1px solid ${border}`, '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': { fontSize: '0.75rem' } } },
+        styleOverrides: {
+          root: { borderTop: `1px solid ${border}`, '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': { fontSize: '0.75rem' } },
+        },
       },
       MuiFormControl: {
         styleOverrides: {
@@ -258,6 +293,14 @@ function buildTheme(mode: PaletteMode) {
   });
 }
 
+// ── Suspense fallback ──────────────────────────────────────────────
+const PageFallback: React.FC = () => (
+  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
+    <CircularProgress size={32} thickness={3} />
+  </Box>
+);
+
+// ── Route tree ─────────────────────────────────────────────────────
 const ThemedApp: React.FC = () => {
   const { mode } = useThemeMode();
   const theme = useMemo(() => buildTheme(mode), [mode]);
@@ -267,34 +310,93 @@ const ThemedApp: React.FC = () => {
       <CssBaseline />
       <BrowserRouter>
         <AuthProvider>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route
-              element={
-                <ProtectedRoute>
-                  <AppLayout />
-                </ProtectedRoute>
-              }
-            >
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/agents" element={<AgentList />} />
-              <Route path="/agents/:agentId" element={<AgentDetail />} />
-              <Route path="/policies" element={<PolicyList />} />
-              <Route path="/policies/create" element={<PolicyEditor />} />
-              <Route path="/policies/:policyId/edit" element={<PolicyEditor />} />
-              <Route path="/audit" element={<AuditLogs />} />
-              <Route path="/alerts" element={<Alerts />} />
+          <Suspense fallback={<PageFallback />}>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+
+              {/* ── Protected layout shell ── */}
               <Route
-                path="/users"
                 element={
-                  <ProtectedRoute requiredRoles={[UserRole.ADMIN]}>
-                    <Users />
+                  <ProtectedRoute>
+                    <AppLayout />
                   </ProtectedRoute>
                 }
-              />
-            </Route>
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+              >
+                {/* Core */}
+                <Route path="/"             element={<Dashboard />} />
+                <Route path="/agents"       element={<AgentList />} />
+                <Route path="/agents/:agentId" element={<AgentDetail />} />
+                <Route path="/policies"     element={<PolicyList />} />
+                <Route path="/policies/create" element={<PolicyEditor />} />
+                <Route path="/policies/:policyId/edit" element={<PolicyEditor />} />
+                <Route path="/audit"        element={<AuditLogs />} />
+                <Route path="/alerts"       element={<Alerts />} />
+                <Route
+                  path="/users"
+                  element={
+                    <ProtectedRoute requiredRoles={[UserRole.SYSTEM_ADMIN, UserRole.ADMIN]}>
+                      <Users />
+                    </ProtectedRoute>
+                  }
+                />
+
+                {/* Clinical Governance */}
+                <Route path="/clinical/model-cards"        element={<ModelCardList />} />
+                <Route path="/clinical/model-cards/new"    element={<ModelCardEditor />} />
+                <Route path="/clinical/model-cards/:id"    element={<ModelCardEditor />} />
+                <Route path="/clinical/bias-audits/:id"    element={<BiasAuditDetail />} />
+                <Route path="/clinical/drift"              element={<DriftMonitor />} />
+                <Route path="/clinical/hitl"               element={<HITLQueue />} />
+                <Route path="/clinical/hitl/:id"           element={<HITLReviewDetail />} />
+
+                {/* Admin Governance */}
+                <Route path="/admin/shadow-ai"             element={<ShadowAIDiscovery />} />
+                <Route path="/admin/scribe-audits"         element={<ScribeAuditList />} />
+                <Route path="/transparency"                element={<TransparencyPortal />} />
+
+                {/* Financial */}
+                <Route path="/finance/prior-auth"          element={<PriorAuthTrail />} />
+                <Route path="/finance/revenue-cycle"       element={<RevenueCycleAudit />} />
+
+                {/* Regulatory */}
+                <Route path="/regulatory/technical-files"  element={<TechnicalFiles />} />
+                <Route path="/regulatory/adverse-events"   element={<AdverseEvents />} />
+                <Route path="/regulatory/pms-reports"      element={<PostMarketSurveillance />} />
+
+                {/* Risk */}
+                <Route path="/risk/portfolio"              element={<RiskPortfolio />} />
+                <Route path="/risk/scores/:modelId"        element={<RiskScoreDetail />} />
+
+                {/* Settings */}
+                <Route
+                  path="/settings/organization"
+                  element={
+                    <ProtectedRoute requiredRoles={[UserRole.SYSTEM_ADMIN, UserRole.ADMIN]}>
+                      <OrganizationSettings />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/settings/risk"
+                  element={
+                    <ProtectedRoute requiredRoles={[UserRole.SYSTEM_ADMIN, UserRole.ADMIN]}>
+                      <RiskConfiguration />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/settings/hipaa"
+                  element={
+                    <ProtectedRoute requiredRoles={[UserRole.SYSTEM_ADMIN, UserRole.ADMIN]}>
+                      <HIPAAConfiguration />
+                    </ProtectedRoute>
+                  }
+                />
+              </Route>
+
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
         </AuthProvider>
       </BrowserRouter>
     </ThemeProvider>

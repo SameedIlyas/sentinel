@@ -294,7 +294,7 @@ class RedisCacheService:
         args_str = json.dumps(arguments, sort_keys=True)
         # Create a hash for long argument strings
         import hashlib
-        args_hash = hashlib.md5(args_str.encode()).hexdigest()
+        args_hash = hashlib.md5(args_str.encode(), usedforsecurity=False).hexdigest()  # nosec B324
         
         return f"policy:{agent_id}:{tool_name}:{args_hash}"
     

@@ -1,70 +1,70 @@
-"""Rate limiting middleware"""
+"""Rate limiting middleware — Redis-backed with in-memory fallback."""
 
-import time
-from collections import defaultdict
-from fastapi import HTTPException, status
+import logging
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 from policy_engine.config import settings
 
-
-class RateLimiter:
-    """Simple in-memory rate limiter"""
-    
-    def __init__(self, requests_per_minute: int):
-        self.requests_per_minute = requests_per_minute
-        self.requests = defaultdict(list)
-    
-    def is_allowed(self, key: str) -> bool:
-        """
-        Check if request is allowed based on rate limit
-        
-        Args:
-            key: Identifier for rate limiting (e.g., API key)
-            
-        Returns:
-            True if request is allowed, False otherwise
-        """
-        now = time.time()
-        minute_ago = now - 60
-        
-        # Remove old requests
-        self.requests[key] = [
-            req_time for req_time in self.requests[key]
-            if req_time > minute_ago
-        ]
-        
-        # Check if under limit
-        if len(self.requests[key]) >= self.requests_per_minute:
-            return False
-        
-        # Add current request
-        self.requests[key].append(now)
-        return True
+logger = logging.getLogger(__name__)
 
 
-# Global rate limiter instance
-rate_limiter = RateLimiter(settings.RATE_LIMIT_PER_MINUTE)
+def _get_redis_limiter():
+    """Lazy-load Redis limiter to avoid import-time Redis connection."""
+    try:
+        import redis as redis_lib
+        from policy_engine.services.redis_rate_limiter import RedisRateLimiter
+        r = redis_lib.from_url(settings.REDIS_URL, socket_connect_timeout=1)
+        return RedisRateLimiter(
+            redis_client=r,
+            requests_per_minute=settings.RATE_LIMIT_PER_MINUTE,
+            fallback_enabled=True,
+        )
+    except Exception as e:
+        logger.warning("Could not initialise Redis rate limiter: %s", e)
+        from policy_engine.services.redis_rate_limiter import RedisRateLimiter
+        return RedisRateLimiter(
+            redis_client=None,
+            requests_per_minute=settings.RATE_LIMIT_PER_MINUTE,
+            fallback_enabled=True,
+        )
+
+
+_limiter = None
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    """Middleware to enforce rate limiting per API key"""
-    
+    """Middleware to enforce rate limiting per API key (Redis-backed)."""
+
     async def dispatch(self, request: Request, call_next):
-        # Skip rate limiting for health checks
+        global _limiter
+        if _limiter is None:
+            _limiter = _get_redis_limiter()
+
         if request.url.path.startswith("/health"):
             return await call_next(request)
-        
-        # Get API key from header
+
         api_key = request.headers.get(settings.API_KEY_HEADER)
-        
-        if api_key:
-            # Check rate limit
-            if not rate_limiter.is_allowed(api_key):
-                raise HTTPException(
-                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail="Rate limit exceeded. Please try again later."
+        identifier = api_key or request.client.host if request.client else "anonymous"
+
+        if identifier:
+            allowed, remaining = _limiter.is_allowed(identifier)
+            if not allowed:
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": "Rate limit exceeded. Please try again later."},
+                    headers={
+                        "X-RateLimit-Limit": str(settings.RATE_LIMIT_PER_MINUTE),
+                        "X-RateLimit-Remaining": "0",
+                        "Retry-After": "60",
+                    },
                 )
-        
-        return await call_next(request)
+
+        response = await call_next(request)
+        if identifier:
+            response.headers["X-RateLimit-Limit"] = str(settings.RATE_LIMIT_PER_MINUTE)
+            response.headers["X-RateLimit-Remaining"] = str(
+                getattr(_limiter, '_last_remaining', settings.RATE_LIMIT_PER_MINUTE)
+            )
+        return response

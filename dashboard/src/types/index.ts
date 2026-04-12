@@ -1,17 +1,26 @@
+// ============================================================
 // User and Authentication Types
+// ============================================================
+
 export enum UserRole {
-  ADMIN = 'admin',
+  SYSTEM_ADMIN = 'system_admin',
+  ADMIN = 'admin',          // ORG_ADMIN — kept as 'admin' for backend compat
+  CMIO = 'cmio',
+  DATA_SCIENTIST = 'data_scientist',
+  COMPLIANCE_OFFICER = 'compliance_officer',
+  CLINICAL_USER = 'clinical_user',
   ANALYST = 'analyst',
   VIEWER = 'viewer',
 }
 
 export interface User {
-  id: number;
+  id: string;
   username: string;
   email: string;
   role: UserRole;
   full_name?: string;
   is_active: boolean;
+  organization_id?: string;
   created_at: string;
   updated_at?: string;
   last_login?: string;
@@ -29,7 +38,10 @@ export interface TokenResponse {
   user: User;
 }
 
+// ============================================================
 // Agent Types
+// ============================================================
+
 export interface Agent {
   id: string;
   agent_id?: string;
@@ -39,7 +51,7 @@ export interface Agent {
   created_at: string;
   last_active?: string;
   systems_accessed?: string[];
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface AgentListResponse {
@@ -53,15 +65,21 @@ export interface AgentListResponse {
 export interface AgentActivityMetrics {
   agent_id: string;
   total_actions: number;
-  blocked_actions: number;
   allowed_actions: number;
+  blocked_actions: number;
+  approval_required: number;
   systems_accessed: string[];
+  activity_by_day: Array<{ date: string; count: number }>;
+  top_tools: Array<{ tool: string; count: number }>;
+  policy_violations: number;
   first_seen: string;
-  last_active: string;
-  status: string;
+  last_active?: string;
 }
 
+// ============================================================
 // Policy Types
+// ============================================================
+
 export interface Policy {
   id: string;
   name: string;
@@ -81,21 +99,13 @@ export interface PolicyRule {
   description?: string;
   conditions: PolicyCondition[];
   action: 'allow' | 'block' | 'require_approval';
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface PolicyCondition {
   field: string;
   operator: string;
-  value: any;
-}
-
-export interface PolicyListResponse {
-  policies: Policy[];
-  total: number;
-  page: number;
-  page_size: number;
-  total_pages: number;
+  value: unknown;
 }
 
 export interface PolicyCreate {
@@ -118,7 +128,18 @@ export interface PolicyUpdate {
   priority?: number;
 }
 
+export interface PolicyListResponse {
+  policies: Policy[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+// ============================================================
 // Audit Log Types
+// ============================================================
+
 export interface AuditLog {
   id: string;
   timestamp: string;
@@ -126,13 +147,13 @@ export interface AuditLog {
   agent_name?: string;
   user_id?: string;
   tool_name?: string;
-  arguments?: Record<string, any>;
+  arguments?: Record<string, unknown>;
   system_accessed: string;
   data_touched?: string;
   decision: 'allowed' | 'blocked' | 'approved';
   policy_ids?: string[];
   reason?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface AuditLogListResponse {
@@ -143,11 +164,16 @@ export interface AuditLogListResponse {
   total_pages: number;
 }
 
+// ============================================================
 // Alert Types
+// ============================================================
+
+export type AlertSeverity = 'low' | 'medium' | 'high' | 'critical';
+
 export interface Alert {
   id: string;
   timestamp: string;
-  severity: 'low' | 'medium' | 'high' | 'critical';
+  severity: AlertSeverity;
   alert_type: string;
   agent_id: string;
   description: string;
@@ -157,85 +183,20 @@ export interface Alert {
   acknowledged_at: string | null;
 }
 
-export interface AlertListResponse {
-  alerts: Alert[];
-  total: number;
-  page: number;
-  page_size: number;
-  total_pages: number;
-}
-
 export interface AlertRule {
   id: string;
   policy_type: string | null;
   alert_type: string;
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  conditions: Record<string, any> | null;
+  severity: AlertSeverity;
+  conditions: Record<string, unknown> | null;
   slack_webhook_url: string | null;
   enabled: boolean;
   created_at: string;
 }
 
-export interface AlertRuleCreate {
-  policy_type?: 'data_access' | 'financial' | 'data_protection' | 'system_access' | null;
-  alert_type: string;
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  conditions?: Record<string, any>;
-  slack_webhook_url?: string;
-  enabled?: boolean;
-}
-
-export interface AlertConfigRequest {
-  global_slack_webhook?: string;
-  alert_rules?: AlertRuleCreate[];
-  deduplication_window_seconds?: number;
-}
-
-export interface SlackConfig {
-  webhook_url: string;
-  channel?: string;
-  enabled: boolean;
-}
-
+// ============================================================
 // Dashboard Metrics
-export interface RecentAlert {
-  id: number;
-  timestamp: string;
-  severity: string;
-  alert_type: string;
-  message: string;
-  agent_id?: string;
-  policy_id?: number;
-}
-
-export interface TopAgent {
-  agent_id: string;
-  action_count: number;
-}
-
-export interface PolicyViolation {
-  policy_name: string;
-  count: number;
-}
-
-export interface SystemAccess {
-  system: string;
-  access_count: number;
-}
-
-export interface ActivityTimelineItem {
-  timestamp: string;
-  count: number;
-}
-
-export interface RecentBlockedAction {
-  id: number;
-  timestamp: string;
-  agent_id: string;
-  action: string;
-  system_accessed: string;
-  policy_id?: number;
-}
+// ============================================================
 
 export interface DashboardMetrics {
   active_agents: number;
@@ -243,16 +204,296 @@ export interface DashboardMetrics {
   blocked_actions: number;
   money_saved: number;
   money_spent: number;
-  recent_alerts: RecentAlert[];
-  top_agents: TopAgent[];
-  policy_violations: PolicyViolation[];
-  systems_accessed: SystemAccess[];
-  activity_timeline: ActivityTimelineItem[];
-  recent_blocked_actions: RecentBlockedAction[];
+  recent_alerts: Array<{
+    id: number;
+    timestamp: string;
+    severity: string;
+    alert_type: string;
+    message: string;
+    agent_id?: string;
+  }>;
+  top_agents: Array<{ agent_id: string; action_count: number }>;
+  policy_violations: Array<{ policy_name: string; count: number }>;
+  systems_accessed: Array<{ system: string; access_count: number }>;
+  activity_timeline: Array<{ timestamp: string; count: number }>;
   alerts_by_severity: Record<string, number>;
+  recent_blocked_actions: Array<{
+    id: string;
+    timestamp: string;
+    agent_id: string;
+    action: string;
+    system_accessed: string;
+  }>;
 }
 
-// API Response Types
+// ============================================================
+// Clinical Types
+// ============================================================
+
+export type ModelCardLifecycle = 'draft' | 'review' | 'published' | 'retired';
+
+export interface ModelCard {
+  id: string;
+  organization_id?: string;
+  model_name: string;
+  model_version: string;
+  intended_use: string;
+  clinical_indications: string;
+  contraindications?: string;
+  training_data_source?: string;
+  performance_summary?: string;
+  bias_summary?: string;
+  fda_status?: string;
+  lifecycle_stage: ModelCardLifecycle;
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type BiasAuditStatus = 'pending' | 'running' | 'completed' | 'failed';
+
+export interface BiasAudit {
+  id: string;
+  organization_id?: string;
+  model_card_id: string;
+  status: BiasAuditStatus;
+  subgroups: string[];
+  overall_score?: number;
+  disparate_impact_ratio?: number;
+  findings_summary?: string;
+  created_by?: string;
+  created_at: string;
+  completed_at?: string;
+}
+
+export type DriftStatus = 'ok' | 'warning' | 'alert';
+
+export interface DriftBaseline {
+  id: string;
+  model_card_id: string;
+  organization_id?: string;
+  feature_name: string;
+  baseline_mean: number;
+  baseline_std: number;
+  created_at: string;
+}
+
+export interface DriftMeasurement {
+  id: string;
+  baseline_id: string;
+  psi_score: number;
+  ks_statistic?: number;
+  status: DriftStatus;
+  measured_at: string;
+}
+
+export type HITLStatus = 'pending' | 'approved' | 'rejected' | 'modified';
+
+export interface HITLReview {
+  id: string;
+  organization_id?: string;
+  model_id: string;
+  ai_decision: string;
+  ai_confidence?: number;
+  risk_score?: number;
+  status: HITLStatus;
+  reviewer_id?: string;
+  reviewer_decision?: string;
+  reviewer_notes?: string;
+  reviewed_at?: string;
+  sla_deadline?: string;
+  created_at: string;
+}
+
+// ============================================================
+// Administrative Governance Types
+// ============================================================
+
+export type ShadowAISeverity = 'low' | 'medium' | 'high' | 'critical';
+
+export interface ShadowAIDetection {
+  id: string;
+  organization_id?: string;
+  detected_tool: string;
+  endpoint_domain: string;
+  staff_ip?: string;
+  hipaa_risk: boolean;
+  severity: ShadowAISeverity;
+  detected_at: string;
+  allowlisted: boolean;
+}
+
+export type ScribeAuditStatus = 'pass' | 'warning' | 'fail';
+
+export interface ScribeAudit {
+  id: string;
+  organization_id?: string;
+  encounter_id: string;
+  completeness_score: number;
+  hallucination_detected: boolean;
+  icd10_accuracy?: number;
+  status: ScribeAuditStatus;
+  findings_count: number;
+  audited_at: string;
+}
+
+export interface TransparencyRecord {
+  id: string;
+  organization_id?: string;
+  algorithm_name: string;
+  plain_language_summary: string;
+  evidence_base?: string;
+  version: number;
+  published_at?: string;
+  created_at: string;
+}
+
+// ============================================================
+// Financial & Payer Governance Types
+// ============================================================
+
+export interface PriorAuthRecord {
+  id: string;
+  organization_id?: string;
+  claim_id: string;
+  service_type?: string;
+  ai_recommendation: string;
+  ai_confidence: number;
+  final_decision: string;
+  denial_reason_code?: string;
+  record_hash: string;
+  prev_record_hash: string;
+  created_at: string;
+}
+
+export interface RevenueCycleAudit {
+  id: string;
+  organization_id?: string;
+  claim_id: string;
+  risk_score: number;
+  upcoding_flags: number;
+  unbundling_flags: number;
+  modifier_flags: number;
+  recommendation: string;
+  audited_at: string;
+}
+
+// ============================================================
+// Regulatory / MedTech Types
+// ============================================================
+
+export type TechnicalFileLifecycle = 'draft' | 'submitted' | 'under_review' | 'approved' | 'retired';
+export type RegulatoryType = 'fda_510k' | 'eu_mdr' | 'both';
+
+export interface TechnicalFile {
+  id: string;
+  organization_id?: string;
+  title: string;
+  regulatory_type: RegulatoryType;
+  product_name: string;
+  device_version: string;
+  lifecycle_stage: TechnicalFileLifecycle;
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type AdverseEventSeverity = 'low' | 'medium' | 'high' | 'critical';
+export type AdverseEventStatus = 'open' | 'investigating' | 'resolved' | 'reported_to_fda';
+
+export interface AdverseEvent {
+  id: string;
+  organization_id?: string;
+  model_id: string;
+  agent_id?: string;
+  event_type: string;
+  severity: AdverseEventSeverity;
+  description: string;
+  patient_impact?: string;
+  status: AdverseEventStatus;
+  reported_at: string;
+  resolved_at?: string;
+  created_at: string;
+}
+
+export type PMSReportType = 'psur' | 'mdr' | 'incident' | 'quarterly';
+export type PMSReportStatus = 'draft' | 'published' | 'submitted';
+
+export interface PMSReport {
+  id: string;
+  organization_id?: string;
+  report_type: PMSReportType;
+  status: PMSReportStatus;
+  period_start: string;
+  period_end: string;
+  summary?: string;
+  generated_at?: string;
+  created_by?: string;
+  created_at: string;
+}
+
+// ============================================================
+// Risk Scoring Types
+// ============================================================
+
+export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
+export type RiskTrend = 'up' | 'down' | 'stable';
+
+export interface RiskScore {
+  id: string;
+  organization_id?: string;
+  model_id: string;
+  agent_id?: string;
+  severity_score: number;
+  exposure_score: number;
+  regulatory_penalty: number;
+  total_risk: number;
+  risk_level: RiskLevel;
+  severity_factors: Record<string, number>;
+  exposure_factors: Record<string, number>;
+  regulatory_flags: Record<string, boolean>;
+  org_multiplier: number;
+  computed_at: string;
+}
+
+export interface RiskHistoryEntry {
+  id: string;
+  model_id: string;
+  total_risk: number;
+  risk_level: RiskLevel;
+  delta?: number;
+  trend: RiskTrend;
+  computed_at: string;
+}
+
+export interface RiskPortfolioModel {
+  model_id: string;
+  total_risk: number;
+  risk_level: RiskLevel;
+  trend: RiskTrend;
+  computed_at: string;
+}
+
+export interface RiskPortfolio {
+  total_models: number;
+  avg_risk: number;
+  by_risk_level: Record<RiskLevel, number>;
+  models: RiskPortfolioModel[];
+}
+
+export interface RiskConfiguration {
+  id: string;
+  organization_id?: string;
+  regulatory_multiplier: number;
+  critical_threshold: number;
+  high_threshold: number;
+  medium_threshold: number;
+}
+
+// ============================================================
+// Shared / Utility Types
+// ============================================================
+
 export interface PaginatedResponse<T> {
   items: T[];
   total: number;

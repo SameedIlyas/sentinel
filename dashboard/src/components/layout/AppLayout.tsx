@@ -1,70 +1,109 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
-  Box,
-  AppBar,
-  Toolbar,
-  Typography,
-  IconButton,
-  Drawer,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Divider,
-  Avatar,
-  Menu,
-  MenuItem,
-  Chip,
-  useTheme,
+  Box, AppBar, Toolbar, Typography, IconButton, Drawer, List, ListItem,
+  ListItemButton, ListItemIcon, ListItemText, Divider, Avatar, Menu,
+  MenuItem, Chip, useTheme, Tooltip,
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
-import DashboardIcon from '@mui/icons-material/Dashboard';
-import PolicyIcon from '@mui/icons-material/Policy';
-import AgentIcon from '@mui/icons-material/SmartToy';
-import AuditIcon from '@mui/icons-material/Assignment';
-import AlertIcon from '@mui/icons-material/Notifications';
-import PeopleIcon from '@mui/icons-material/People';
+import ChevronLeft from '@mui/icons-material/ChevronLeft';
 import LogoutIcon from '@mui/icons-material/Logout';
 import AccountCircle from '@mui/icons-material/AccountCircle';
-import ChevronLeft from '@mui/icons-material/ChevronLeft';
 import KeyboardArrowDown from '@mui/icons-material/KeyboardArrowDown';
 import LightModeOutlined from '@mui/icons-material/LightModeOutlined';
 import DarkModeOutlined from '@mui/icons-material/DarkModeOutlined';
+// Core icons
+import DashboardIcon from '@mui/icons-material/Dashboard';
+import SmartToyIcon from '@mui/icons-material/SmartToy';
+import PolicyIcon from '@mui/icons-material/Policy';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import NotificationsIcon from '@mui/icons-material/Notifications';
+import PeopleIcon from '@mui/icons-material/People';
+// Clinical icons
+import ArticleIcon from '@mui/icons-material/Article';
+import BalanceIcon from '@mui/icons-material/Balance';
+import ShowChartIcon from '@mui/icons-material/ShowChart';
+import HowToRegIcon from '@mui/icons-material/HowToReg';
+// Admin icons
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
+import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
+import PublicIcon from '@mui/icons-material/Public';
+// Finance icons
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
+import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+// Regulatory icons
+import DescriptionIcon from '@mui/icons-material/Description';
+import ReportProblemIcon from '@mui/icons-material/ReportProblem';
+import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
+// Risk icons
+import SpeedIcon from '@mui/icons-material/Speed';
+// Settings icons
+import BusinessIcon from '@mui/icons-material/Business';
+import TuneIcon from '@mui/icons-material/Tune';
+import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
+
 import { useAuth } from '@/contexts/AuthContext';
 import { useThemeMode } from '@/contexts/ThemeContext';
+import { useUIStore } from '@/stores/uiStore';
+import { getNavForRole } from '@/config/navigation';
 import { UserRole } from '@/types';
 
 const DRAWER_WIDTH = 236;
 const DRAWER_COLLAPSED = 66;
 
-interface NavItem {
-  label: string;
-  path: string;
-  icon: React.ReactNode;
-  requiredRoles?: UserRole[];
-}
+const ICON_MAP: Record<string, React.ReactNode> = {
+  Dashboard: <DashboardIcon sx={{ fontSize: 19 }} />,
+  SmartToy: <SmartToyIcon sx={{ fontSize: 19 }} />,
+  Policy: <PolicyIcon sx={{ fontSize: 19 }} />,
+  Assignment: <AssignmentIcon sx={{ fontSize: 19 }} />,
+  Notifications: <NotificationsIcon sx={{ fontSize: 19 }} />,
+  People: <PeopleIcon sx={{ fontSize: 19 }} />,
+  Article: <ArticleIcon sx={{ fontSize: 19 }} />,
+  BalanceOutlined: <BalanceIcon sx={{ fontSize: 19 }} />,
+  ShowChart: <ShowChartIcon sx={{ fontSize: 19 }} />,
+  HowToReg: <HowToRegIcon sx={{ fontSize: 19 }} />,
+  VisibilityOff: <VisibilityOffIcon sx={{ fontSize: 19 }} />,
+  RecordVoiceOver: <RecordVoiceOverIcon sx={{ fontSize: 19 }} />,
+  Public: <PublicIcon sx={{ fontSize: 19 }} />,
+  AccountTree: <AccountTreeIcon sx={{ fontSize: 19 }} />,
+  AttachMoney: <AttachMoneyIcon sx={{ fontSize: 19 }} />,
+  Description: <DescriptionIcon sx={{ fontSize: 19 }} />,
+  ReportProblem: <ReportProblemIcon sx={{ fontSize: 19 }} />,
+  MonitorHeart: <MonitorHeartIcon sx={{ fontSize: 19 }} />,
+  Speed: <SpeedIcon sx={{ fontSize: 19 }} />,
+  Business: <BusinessIcon sx={{ fontSize: 19 }} />,
+  Tune: <TuneIcon sx={{ fontSize: 19 }} />,
+  HealthAndSafety: <HealthAndSafetyIcon sx={{ fontSize: 19 }} />,
+};
 
-const navItems: NavItem[] = [
-  { label: 'Dashboard', path: '/', icon: <DashboardIcon sx={{ fontSize: 19 }} /> },
-  { label: 'Agents', path: '/agents', icon: <AgentIcon sx={{ fontSize: 19 }} /> },
-  { label: 'Policies', path: '/policies', icon: <PolicyIcon sx={{ fontSize: 19 }} /> },
-  { label: 'Audit Logs', path: '/audit', icon: <AuditIcon sx={{ fontSize: 19 }} /> },
-  { label: 'Alerts', path: '/alerts', icon: <AlertIcon sx={{ fontSize: 19 }} /> },
-  { label: 'Users', path: '/users', icon: <PeopleIcon sx={{ fontSize: 19 }} />, requiredRoles: [UserRole.ADMIN] },
-];
+const ROLE_COLORS: Record<string, string> = {
+  system_admin: '#df1b41',
+  admin: '#e87f17',
+  cmio: '#635bff',
+  data_scientist: '#3b82f6',
+  compliance_officer: '#0ea371',
+  clinical_user: '#a78bfa',
+  analyst: '#f59e0b',
+  viewer: '#8b8fa3',
+};
 
 const AppLayout: React.FC = () => {
   const theme = useTheme();
   const { mode, toggleTheme } = useThemeMode();
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout, hasRole } = useAuth();
-  const [drawerOpen, setDrawerOpen] = useState(true);
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const { user, logout } = useAuth();
+  const { sidebarOpen, toggleSidebar } = useUIStore();
+  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
 
   const dark = mode === 'dark';
+  const currentWidth = sidebarOpen ? DRAWER_WIDTH : DRAWER_COLLAPSED;
+  const roleColor = ROLE_COLORS[user?.role ?? ''] ?? theme.palette.text.secondary;
+
+  const navSections = user ? getNavForRole(user.role as UserRole) : [];
+
+  const isActive = (path: string) =>
+    path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
 
   const handleLogout = async () => {
     setAnchorEl(null);
@@ -72,29 +111,9 @@ const AppLayout: React.FC = () => {
     navigate('/login');
   };
 
-  const getRoleColor = (role: string) => {
-    switch (role) {
-      case 'admin': return theme.palette.error.main;
-      case 'analyst': return theme.palette.warning.main;
-      case 'viewer': return theme.palette.info.main;
-      default: return theme.palette.text.secondary;
-    }
-  };
-
-  const filteredNavItems = navItems.filter((item) => {
-    if (!item.requiredRoles) return true;
-    return hasRole(item.requiredRoles);
-  });
-
-  const isActive = (path: string) => {
-    if (path === '/') return location.pathname === '/';
-    return location.pathname.startsWith(path);
-  };
-
-  const currentWidth = drawerOpen ? DRAWER_WIDTH : DRAWER_COLLAPSED;
-
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
+      {/* ── Top bar ── */}
       <AppBar
         position="fixed"
         sx={{
@@ -107,73 +126,50 @@ const AppLayout: React.FC = () => {
         <Toolbar sx={{ minHeight: '52px !important', px: { xs: 2, sm: 3 } }}>
           <IconButton
             edge="start"
-            onClick={() => setDrawerOpen(!drawerOpen)}
+            onClick={toggleSidebar}
+            size="small"
             sx={{ mr: 1, color: 'text.secondary' }}
-            size="small"
+            aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
           >
-            {drawerOpen ? <ChevronLeft fontSize="small" /> : <MenuIcon fontSize="small" />}
+            {sidebarOpen ? <ChevronLeft fontSize="small" /> : <MenuIcon fontSize="small" />}
           </IconButton>
-
           <Box sx={{ flexGrow: 1 }} />
-
-          <IconButton
-            onClick={toggleTheme}
-            size="small"
-            sx={{
-              mr: 1.5,
-              color: 'text.secondary',
-              border: `1px solid ${theme.palette.divider}`,
-              width: 32,
-              height: 32,
-            }}
-          >
-            {dark ? <LightModeOutlined sx={{ fontSize: 16 }} /> : <DarkModeOutlined sx={{ fontSize: 16 }} />}
-          </IconButton>
-
+          <Tooltip title={dark ? 'Light mode' : 'Dark mode'}>
+            <IconButton
+              onClick={toggleTheme}
+              size="small"
+              aria-label="Toggle theme"
+              sx={{ mr: 1.5, color: 'text.secondary', border: `1px solid ${theme.palette.divider}`, width: 32, height: 32 }}
+            >
+              {dark ? <LightModeOutlined sx={{ fontSize: 16 }} /> : <DarkModeOutlined sx={{ fontSize: 16 }} />}
+            </IconButton>
+          </Tooltip>
           <Box
             onClick={(e) => setAnchorEl(e.currentTarget)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === 'Enter' && setAnchorEl(e.currentTarget as HTMLElement)}
+            aria-label="User menu"
             sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1,
-              cursor: 'pointer',
-              py: 0.5,
-              px: 1,
-              borderRadius: 1.5,
-              border: `1px solid transparent`,
+              display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer',
+              py: 0.5, px: 1, borderRadius: 1.5, border: '1px solid transparent',
               '&:hover': { bgcolor: dark ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.03)' },
             }}
           >
-            <Avatar
-              sx={{
-                width: 28,
-                height: 28,
-                bgcolor: theme.palette.primary.main,
-                color: '#fff',
-                fontSize: '0.7rem',
-                fontWeight: 700,
-              }}
-            >
+            <Avatar sx={{ width: 28, height: 28, bgcolor: 'primary.main', color: '#fff', fontSize: '0.7rem', fontWeight: 700 }}>
               {user?.username?.charAt(0).toUpperCase()}
             </Avatar>
             <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
               <Typography sx={{ fontWeight: 600, lineHeight: 1.2, fontSize: '0.775rem', color: 'text.primary' }}>
                 {user?.full_name || user?.username}
               </Typography>
-              <Typography sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>
-                {user?.role}
-              </Typography>
+              <Typography sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>{user?.role}</Typography>
             </Box>
             <KeyboardArrowDown sx={{ fontSize: 15, color: 'text.secondary' }} />
           </Box>
-
-          <Menu
-            anchorEl={anchorEl}
-            open={Boolean(anchorEl)}
-            onClose={() => setAnchorEl(null)}
+          <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}
             transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-            anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-          >
+            anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}>
             <MenuItem disabled sx={{ opacity: '0.7 !important' }}>
               <ListItemIcon><AccountCircle fontSize="small" /></ListItemIcon>
               <Box>
@@ -190,158 +186,88 @@ const AppLayout: React.FC = () => {
         </Toolbar>
       </AppBar>
 
+      {/* ── Sidebar ── */}
       <Drawer
         variant="permanent"
         sx={{
-          width: currentWidth,
-          flexShrink: 0,
+          width: currentWidth, flexShrink: 0,
           transition: 'width 0.2s cubic-bezier(0.4,0,0.2,1)',
-          '& .MuiDrawer-paper': {
-            width: currentWidth,
-            boxSizing: 'border-box',
-            overflowX: 'hidden',
-            transition: 'width 0.2s cubic-bezier(0.4,0,0.2,1)',
-          },
+          '& .MuiDrawer-paper': { width: currentWidth, boxSizing: 'border-box', overflowX: 'hidden', transition: 'width 0.2s cubic-bezier(0.4,0,0.2,1)' },
         }}
       >
-        <Box sx={{ pt: 1.75, pb: 0.75, px: drawerOpen ? 2.25 : 1.25, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 52 }}>
-          <Box
-            component="img"
-            src="/sentinel.png"
-            alt="Sentinel Governance AI"
-            sx={{
-              height: drawerOpen ? 44 : 30,
-              width: 'auto',
-              objectFit: 'contain',
-              flexShrink: 0,
-            }}
-          />
+        {/* Logo */}
+        <Box sx={{ pt: 1.75, pb: 0.75, px: sidebarOpen ? 2.25 : 1.25, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 52 }}>
+          <Box component="img" src="/sentinel.png" alt="Sentinel Governance AI"
+            sx={{ height: sidebarOpen ? 44 : 30, width: 'auto', objectFit: 'contain', flexShrink: 0 }} />
         </Box>
-
         <Divider sx={{ mx: 1.75, my: 0.75 }} />
 
-        <Box sx={{ flex: 1, py: 0.5 }}>
-          <List sx={{ px: 1 }}>
-            {filteredNavItems.map((item) => {
-              const active = isActive(item.path);
-              return (
-                <ListItem key={item.path} disablePadding sx={{ mb: 0.25 }}>
-                  <ListItemButton
-                    onClick={() => navigate(item.path)}
-                    sx={{
-                      borderRadius: '6px',
-                      minHeight: 36,
-                      px: drawerOpen ? 1.25 : 1.25,
-                      justifyContent: drawerOpen ? 'initial' : 'center',
-                      position: 'relative',
-                      bgcolor: active
-                        ? (dark ? 'rgba(99,91,255,0.1)' : 'rgba(99,91,255,0.06)')
-                        : 'transparent',
-                      '&:hover': {
-                        bgcolor: active
-                          ? (dark ? 'rgba(99,91,255,0.14)' : 'rgba(99,91,255,0.09)')
-                          : (dark ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.03)'),
-                      },
-                      '&::before': active ? {
-                        content: '""',
-                        position: 'absolute',
-                        left: 0,
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        width: 3,
-                        height: 18,
-                        borderRadius: '0 3px 3px 0',
-                        bgcolor: 'primary.main',
-                      } : {},
-                    }}
-                  >
-                    <ListItemIcon
-                      sx={{
-                        color: active ? 'primary.main' : 'text.secondary',
-                        minWidth: drawerOpen ? 34 : 'auto',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      {item.icon}
-                    </ListItemIcon>
-                    {drawerOpen && (
-                      <ListItemText
-                        primary={item.label}
-                        primaryTypographyProps={{
-                          fontSize: '0.8125rem',
-                          fontWeight: active ? 600 : 450,
-                          color: active ? 'text.primary' : 'text.secondary',
-                        }}
-                      />
-                    )}
-                  </ListItemButton>
-                </ListItem>
-              );
-            })}
-          </List>
+        {/* Nav sections */}
+        <Box sx={{ flex: 1, py: 0.5, overflowY: 'auto', overflowX: 'hidden' }}>
+          {navSections.map((section, si) => (
+            <Box key={section.section}>
+              {si > 0 && <Divider sx={{ mx: 1.75, my: 0.5 }} />}
+              {sidebarOpen && (
+                <Typography sx={{ px: 2.25, pt: si > 0 ? 1 : 0.5, pb: 0.25, fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'text.secondary' }}>
+                  {section.section}
+                </Typography>
+              )}
+              <List sx={{ px: 1, py: 0.25 }}>
+                {section.items.map((item) => {
+                  const active = isActive(item.path);
+                  const icon = ICON_MAP[item.iconName] ?? <DashboardIcon sx={{ fontSize: 19 }} />;
+                  return (
+                    <ListItem key={item.path} disablePadding sx={{ mb: 0.25 }}>
+                      <Tooltip title={sidebarOpen ? '' : item.label} placement="right">
+                        <ListItemButton
+                          onClick={() => navigate(item.path)}
+                          aria-label={item.label}
+                          aria-current={active ? 'page' : undefined}
+                          sx={{
+                            borderRadius: '6px', minHeight: 36,
+                            px: 1.25, justifyContent: sidebarOpen ? 'initial' : 'center',
+                            position: 'relative',
+                            bgcolor: active ? (dark ? 'rgba(99,91,255,0.1)' : 'rgba(99,91,255,0.06)') : 'transparent',
+                            '&:hover': { bgcolor: active ? (dark ? 'rgba(99,91,255,0.14)' : 'rgba(99,91,255,0.09)') : (dark ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.03)') },
+                            '&::before': active ? { content: '""', position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', width: 3, height: 18, borderRadius: '0 3px 3px 0', bgcolor: 'primary.main' } : {},
+                          }}
+                        >
+                          <ListItemIcon sx={{ color: active ? 'primary.main' : 'text.secondary', minWidth: sidebarOpen ? 34 : 'auto', justifyContent: 'center' }}>
+                            {icon}
+                          </ListItemIcon>
+                          {sidebarOpen && (
+                            <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: '0.8125rem', fontWeight: active ? 600 : 450, color: active ? 'text.primary' : 'text.secondary' }} />
+                          )}
+                        </ListItemButton>
+                      </Tooltip>
+                    </ListItem>
+                  );
+                })}
+              </List>
+            </Box>
+          ))}
         </Box>
 
-        {drawerOpen && (
+        {/* User card at bottom */}
+        {sidebarOpen && (
           <Box sx={{ p: 1.5 }}>
-            <Box
-              sx={{
-                p: 1.25,
-                borderRadius: '8px',
-                bgcolor: dark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)',
-                border: `1px solid ${theme.palette.divider}`,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1.25,
-              }}
-            >
-              <Avatar
-                sx={{
-                  width: 30,
-                  height: 30,
-                  bgcolor: theme.palette.primary.main,
-                  color: '#fff',
-                  fontSize: '0.7rem',
-                  fontWeight: 700,
-                }}
-              >
+            <Box sx={{ p: 1.25, borderRadius: '8px', bgcolor: dark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)', border: `1px solid ${theme.palette.divider}`, display: 'flex', alignItems: 'center', gap: 1.25 }}>
+              <Avatar sx={{ width: 30, height: 30, bgcolor: 'primary.main', color: '#fff', fontSize: '0.7rem', fontWeight: 700 }}>
                 {user?.username?.charAt(0).toUpperCase()}
               </Avatar>
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Typography sx={{ fontWeight: 600, fontSize: '0.75rem', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'text.primary' }}>
                   {user?.full_name || user?.username}
                 </Typography>
-                <Chip
-                  label={user?.role}
-                  size="small"
-                  sx={{
-                    height: 17,
-                    fontSize: '0.55rem',
-                    fontWeight: 600,
-                    bgcolor: `${getRoleColor(user?.role || '')}18`,
-                    color: getRoleColor(user?.role || ''),
-                    border: `1px solid ${getRoleColor(user?.role || '')}30`,
-                    mt: 0.25,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
-                    '& .MuiChip-label': { px: 0.75 },
-                  }}
-                />
+                <Chip label={user?.role} size="small" sx={{ height: 17, fontSize: '0.55rem', fontWeight: 600, bgcolor: `${roleColor}18`, color: roleColor, border: `1px solid ${roleColor}30`, mt: 0.25, textTransform: 'uppercase', letterSpacing: '0.05em', '& .MuiChip-label': { px: 0.75 } }} />
               </Box>
             </Box>
           </Box>
         )}
       </Drawer>
 
-      <Box
-        component="main"
-        sx={{
-          flexGrow: 1,
-          px: { xs: 2, sm: 3 },
-          py: 2.5,
-          transition: 'all 0.2s cubic-bezier(0.4,0,0.2,1)',
-          minHeight: '100vh',
-        }}
-      >
+      {/* ── Main content ── */}
+      <Box component="main" sx={{ flexGrow: 1, px: { xs: 2, sm: 3 }, py: 2.5, transition: 'all 0.2s cubic-bezier(0.4,0,0.2,1)', minHeight: '100vh' }}>
         <Toolbar sx={{ minHeight: '52px !important' }} />
         <Outlet />
       </Box>

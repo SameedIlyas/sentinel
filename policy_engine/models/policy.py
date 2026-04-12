@@ -1,6 +1,6 @@
 """Policy database model"""
 
-from sqlalchemy import Column, String, DateTime, JSON, Boolean, Integer, Enum
+from sqlalchemy import Column, String, DateTime, JSON, Boolean, Integer, Enum, ForeignKey
 from datetime import datetime
 import enum
 
@@ -44,3 +44,4 @@ class Policy(Base):
     created_by = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    organization_id = Column(String, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True)

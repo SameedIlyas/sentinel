@@ -68,24 +68,33 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+def _authenticate_ws_token(token: str | None) -> bool:
+    """Validate JWT token for WebSocket. Returns True if valid."""
+    if not token:
+        return False
+    from policy_engine.auth.jwt_utils import decode_access_token
+    payload = decode_access_token(token)
+    if payload is None:
+        return False
+    jti = payload.get("jti")
+    if jti:
+        from policy_engine.services.token_blacklist import get_token_blacklist
+        if get_token_blacklist().is_blacklisted(jti):
+            return False
+    return True
+
+
 @router.websocket("/ws/dashboard")
 async def dashboard_websocket(
     websocket: WebSocket,
+    token: str | None = None,
     db: Session = Depends(get_db)
 ):
-    """
-    WebSocket endpoint for real-time dashboard updates
-    
-    Sends dashboard metrics every 30 seconds to meet the 60-second
-    latency requirement from Requirement 5.6
-    
-    Message format:
-    {
-        "type": "metrics_update",
-        "timestamp": "2024-02-11T...",
-        "data": { ...dashboard metrics... }
-    }
-    """
+    """WebSocket endpoint for real-time dashboard updates."""
+    if not _authenticate_ws_token(token):
+        await websocket.close(code=4001)
+        return
+
     await manager.connect(websocket)
     
     try:
@@ -133,20 +142,12 @@ async def dashboard_websocket(
 
 
 @router.websocket("/ws/events")
-async def events_websocket(websocket: WebSocket):
-    """
-    WebSocket endpoint for real-time event notifications
-    
-    Streams events like new alerts, blocked actions, policy violations, etc.
-    
-    Message format:
-    {
-        "type": "event",
-        "event_type": "alert" | "blocked_action" | "new_agent",
-        "timestamp": "2024-02-11T...",
-        "data": { ...event data... }
-    }
-    """
+async def events_websocket(websocket: WebSocket, token: str | None = None):
+    """WebSocket endpoint for real-time event notifications."""
+    if not _authenticate_ws_token(token):
+        await websocket.close(code=4001)
+        return
+
     await manager.connect(websocket)
     
     try:

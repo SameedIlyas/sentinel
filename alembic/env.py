@@ -10,6 +10,13 @@ from alembic import context
 # Import the Base and all models
 from policy_engine.database import Base
 from policy_engine.models import Agent, Policy, AuditLog, Alert
+from policy_engine.models.alert_config import AlertConfig  # noqa: F401
+from policy_engine.models.api_key import APIKey  # noqa: F401
+from policy_engine.models.user import User  # noqa: F401
+from policy_engine.models.organization import Organization, OrganizationMember  # noqa: F401
+from policy_engine.models.fhir_cache import FHIRResourceCache  # noqa: F401
+from policy_engine.models.dicom_metadata import DICOMMetadataRecord  # noqa: F401
+from policy_engine.models.phi_log import PHIRedactionLog, DataClassificationRecord  # noqa: F401
 from policy_engine.config import settings
 
 # this is the Alembic Config object, which provides

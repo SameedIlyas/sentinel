@@ -1,0 +1,410 @@
+"""HITL Validation Portal endpoints."""
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from typing import List, Optional
+import uuid
+from datetime import datetime
+
+from policy_engine.database import get_db
+from policy_engine.auth.rbac import get_current_user
+from policy_engine.models.user import User, has_permission
+from policy_engine.models.hitl import HITLReview, HITLAuditTrail, HITLAssignment
+from policy_engine.domain.clinical.hitl import (
+    HITLAuditEntry,
+    build_audit_chain,
+    verify_audit_chain,
+)
+from pydantic import BaseModel
+
+router = APIRouter()
+
+
+# ---------------------------------------------------------------------------
+# Schemas
+# ---------------------------------------------------------------------------
+
+class HITLReviewCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    ai_decision: Optional[dict] = None
+    risk_score: float = 0.0
+    priority: str = "medium"
+    sla_deadline: Optional[datetime] = None
+    organization_id: Optional[str] = None
+
+
+class HITLAssignRequest(BaseModel):
+    assigned_to: str
+
+
+class HITLActionRequest(BaseModel):
+    comments: Optional[str] = None
+
+
+class HITLReviewResponse(BaseModel):
+    id: str
+    title: str
+    description: Optional[str] = None
+    ai_decision: dict = {}
+    risk_score: float
+    status: str
+    priority: str
+    assigned_to: Optional[str] = None
+    sla_deadline: Optional[datetime] = None
+    organization_id: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _check_permission(current_user: User, action: str) -> None:
+    if not has_permission(current_user.role, "hitl_reviews", action):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Insufficient permissions to {action} hitl_reviews",
+        )
+
+
+def _get_review_or_404(review_id: str, db: Session) -> HITLReview:
+    review = db.query(HITLReview).filter(HITLReview.id == review_id).first()
+    if not review:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="HITL review not found")
+    return review
+
+
+def _to_response(review: HITLReview) -> dict:
+    return {
+        "id": review.id,
+        "title": review.title,
+        "description": review.description,
+        "ai_decision": review.ai_decision or {},
+        "risk_score": review.risk_score,
+        "status": review.status,
+        "priority": review.priority,
+        "assigned_to": review.assigned_to,
+        "sla_deadline": review.sla_deadline,
+        "organization_id": review.organization_id,
+        "created_at": review.created_at,
+        "updated_at": review.updated_at,
+    }
+
+
+def _append_audit_entry(
+    review_id: str,
+    actor_id: str,
+    action: str,
+    old_status: Optional[str],
+    new_status: Optional[str],
+    comments: Optional[str],
+    db: Session,
+) -> None:
+    """Append a new audit trail entry and recompute the hash chain for this review."""
+    # Fetch existing entries ordered by timestamp
+    existing_entries = (
+        db.query(HITLAuditTrail)
+        .filter(HITLAuditTrail.review_id == review_id)
+        .order_by(HITLAuditTrail.timestamp)
+        .all()
+    )
+
+    now = datetime.utcnow()
+
+    # Build domain objects from existing DB entries
+    domain_entries = [
+        HITLAuditEntry(
+            actor_id=e.actor_id or "",
+            action=e.action,
+            old_status=e.old_status,
+            new_status=e.new_status,
+            comments=e.comments,
+            timestamp=e.timestamp.isoformat() if e.timestamp else now.isoformat(),
+            entry_hash=e.entry_hash or "",
+        )
+        for e in existing_entries
+    ]
+
+    # Create new domain entry
+    new_domain_entry = HITLAuditEntry(
+        actor_id=actor_id,
+        action=action,
+        old_status=old_status,
+        new_status=new_status,
+        comments=comments,
+        timestamp=now.isoformat(),
+        entry_hash="",
+    )
+    domain_entries.append(new_domain_entry)
+
+    # Rebuild hash chain for all entries
+    build_audit_chain(domain_entries)
+
+    # Update existing DB entries with recomputed hashes
+    for db_entry, domain_entry in zip(existing_entries, domain_entries[:-1]):
+        db_entry.entry_hash = domain_entry.entry_hash
+
+    # Create new DB entry
+    new_db_entry = HITLAuditTrail(
+        id=str(uuid.uuid4()),
+        review_id=review_id,
+        actor_id=actor_id,
+        action=action,
+        old_status=old_status,
+        new_status=new_status,
+        comments=comments,
+        timestamp=now,
+        entry_hash=new_domain_entry.entry_hash,
+    )
+    db.add(new_db_entry)
+
+
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
+
+@router.get("/hitl/reviews", response_model=List[HITLReviewResponse])
+def list_hitl_reviews(
+    status_filter: Optional[str] = None,
+    priority: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _check_permission(current_user, "read")
+    query = db.query(HITLReview)
+    if status_filter:
+        query = query.filter(HITLReview.status == status_filter)
+    if priority:
+        query = query.filter(HITLReview.priority == priority)
+    reviews = query.all()
+    return [_to_response(r) for r in reviews]
+
+
+@router.post("/hitl/reviews", status_code=status.HTTP_201_CREATED)
+def create_hitl_review(
+    payload: HITLReviewCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _check_permission(current_user, "create")
+    now = datetime.utcnow()
+    review = HITLReview(
+        id=str(uuid.uuid4()),
+        title=payload.title,
+        description=payload.description,
+        ai_decision=payload.ai_decision or {},
+        risk_score=payload.risk_score,
+        status="pending",
+        priority=payload.priority,
+        sla_deadline=payload.sla_deadline,
+        organization_id=payload.organization_id,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(review)
+    db.flush()
+
+    _append_audit_entry(
+        review_id=review.id,
+        actor_id=current_user.id,
+        action="create",
+        old_status=None,
+        new_status="pending",
+        comments=None,
+        db=db,
+    )
+
+    db.commit()
+    db.refresh(review)
+    return _to_response(review)
+
+
+@router.get("/hitl/reviews/{review_id}")
+def get_hitl_review(
+    review_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _check_permission(current_user, "read")
+    review = _get_review_or_404(review_id, db)
+    return _to_response(review)
+
+
+@router.patch("/hitl/reviews/{review_id}/assign")
+def assign_hitl_review(
+    review_id: str,
+    payload: HITLAssignRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _check_permission(current_user, "update")
+    review = _get_review_or_404(review_id, db)
+    old_status = review.status
+
+    review.assigned_to = payload.assigned_to
+    review.status = "in_review"
+    review.updated_at = datetime.utcnow()
+
+    assignment = HITLAssignment(
+        id=str(uuid.uuid4()),
+        review_id=review_id,
+        assigned_to=payload.assigned_to,
+        assigned_by=current_user.id,
+        assigned_at=datetime.utcnow(),
+    )
+    db.add(assignment)
+
+    _append_audit_entry(
+        review_id=review_id,
+        actor_id=current_user.id,
+        action="assign",
+        old_status=old_status,
+        new_status="in_review",
+        comments=None,
+        db=db,
+    )
+
+    db.commit()
+    db.refresh(review)
+    return _to_response(review)
+
+
+@router.post("/hitl/reviews/{review_id}/approve")
+def approve_hitl_review(
+    review_id: str,
+    payload: HITLActionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _check_permission(current_user, "update")
+    review = _get_review_or_404(review_id, db)
+    old_status = review.status
+
+    review.status = "approved"
+    review.updated_at = datetime.utcnow()
+
+    _append_audit_entry(
+        review_id=review_id,
+        actor_id=current_user.id,
+        action="approve",
+        old_status=old_status,
+        new_status="approved",
+        comments=payload.comments,
+        db=db,
+    )
+
+    db.commit()
+    db.refresh(review)
+    return _to_response(review)
+
+
+@router.post("/hitl/reviews/{review_id}/reject")
+def reject_hitl_review(
+    review_id: str,
+    payload: HITLActionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _check_permission(current_user, "update")
+    review = _get_review_or_404(review_id, db)
+    old_status = review.status
+
+    review.status = "rejected"
+    review.updated_at = datetime.utcnow()
+
+    _append_audit_entry(
+        review_id=review_id,
+        actor_id=current_user.id,
+        action="reject",
+        old_status=old_status,
+        new_status="rejected",
+        comments=payload.comments,
+        db=db,
+    )
+
+    db.commit()
+    db.refresh(review)
+    return _to_response(review)
+
+
+@router.post("/hitl/reviews/{review_id}/escalate")
+def escalate_hitl_review(
+    review_id: str,
+    payload: HITLActionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _check_permission(current_user, "update")
+    review = _get_review_or_404(review_id, db)
+    old_status = review.status
+
+    review.status = "escalated"
+    review.updated_at = datetime.utcnow()
+
+    _append_audit_entry(
+        review_id=review_id,
+        actor_id=current_user.id,
+        action="escalate",
+        old_status=old_status,
+        new_status="escalated",
+        comments=payload.comments,
+        db=db,
+    )
+
+    db.commit()
+    db.refresh(review)
+    return _to_response(review)
+
+
+@router.get("/hitl/reviews/{review_id}/audit-trail")
+def get_audit_trail(
+    review_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _check_permission(current_user, "read")
+    _get_review_or_404(review_id, db)
+
+    db_entries = (
+        db.query(HITLAuditTrail)
+        .filter(HITLAuditTrail.review_id == review_id)
+        .order_by(HITLAuditTrail.timestamp)
+        .all()
+    )
+
+    # Verify chain integrity using domain logic
+    domain_entries = [
+        HITLAuditEntry(
+            actor_id=e.actor_id or "",
+            action=e.action,
+            old_status=e.old_status,
+            new_status=e.new_status,
+            comments=e.comments,
+            timestamp=e.timestamp.isoformat() if e.timestamp else "",
+            entry_hash=e.entry_hash or "",
+        )
+        for e in db_entries
+    ]
+    chain_valid = verify_audit_chain(domain_entries)
+
+    return {
+        "review_id": review_id,
+        "chain_valid": chain_valid,
+        "entries": [
+            {
+                "id": e.id,
+                "actor_id": e.actor_id,
+                "action": e.action,
+                "old_status": e.old_status,
+                "new_status": e.new_status,
+                "comments": e.comments,
+                "timestamp": e.timestamp,
+                "entry_hash": e.entry_hash,
+            }
+            for e in db_entries
+        ],
+    }
