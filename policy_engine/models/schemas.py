@@ -5,6 +5,21 @@ from typing import List, Optional, Any, Dict
 from datetime import datetime
 from enum import Enum
 
+# ---------------------------------------------------------------------------
+# Field constraint constants — single source of truth for all input limits
+# ---------------------------------------------------------------------------
+FIELD_LIMITS: dict = {
+    "agent_id": {"max_length": 128, "pattern": r"^[a-zA-Z0-9_\-\.]+$"},
+    "tool_name": {"max_length": 256},
+    "system": {"max_length": 256},
+    "user_id": {"max_length": 128},
+    "name": {"max_length": 255},
+    "description": {"max_length": 2000},
+    "batch_max_items": 100,
+    "applies_to_max_items": 100,
+    "rules_max_items": 50,
+}
+
 
 class PolicyType(str, Enum):
     """Policy type enumeration"""
@@ -50,10 +65,10 @@ class PolicyRule(BaseModel):
 class PolicyCreate(BaseModel):
     """Schema for creating a new policy"""
     name: str = Field(..., min_length=1, max_length=255, description="Policy name")
-    description: Optional[str] = Field(None, max_length=1000, description="Policy description")
+    description: Optional[str] = Field(None, max_length=FIELD_LIMITS["description"]["max_length"], description="Policy description")
     policy_type: PolicyType = Field(..., description="Type of policy")
-    rules: List[PolicyRule] = Field(..., min_length=1, description="List of policy rules")
-    applies_to: List[str] = Field(..., min_length=1, description="List of agent IDs or ['*'] for all")
+    rules: List[PolicyRule] = Field(..., min_length=1, max_length=FIELD_LIMITS["rules_max_items"], description="List of policy rules")
+    applies_to: List[str] = Field(..., min_length=1, max_length=FIELD_LIMITS["applies_to_max_items"], description="List of agent IDs or ['*'] for all")
     priority: int = Field(default=0, ge=0, le=1000, description="Policy priority (0-1000)")
     enabled: bool = Field(default=True, description="Whether policy is enabled")
     
@@ -69,10 +84,10 @@ class PolicyCreate(BaseModel):
 class PolicyUpdate(BaseModel):
     """Schema for updating an existing policy"""
     name: Optional[str] = Field(None, min_length=1, max_length=255, description="Policy name")
-    description: Optional[str] = Field(None, max_length=1000, description="Policy description")
+    description: Optional[str] = Field(None, max_length=FIELD_LIMITS["description"]["max_length"], description="Policy description")
     policy_type: Optional[PolicyType] = Field(None, description="Type of policy")
-    rules: Optional[List[PolicyRule]] = Field(None, min_length=1, description="List of policy rules")
-    applies_to: Optional[List[str]] = Field(None, min_length=1, description="List of agent IDs or ['*'] for all")
+    rules: Optional[List[PolicyRule]] = Field(None, min_length=1, max_length=FIELD_LIMITS["rules_max_items"], description="List of policy rules")
+    applies_to: Optional[List[str]] = Field(None, min_length=1, max_length=FIELD_LIMITS["applies_to_max_items"], description="List of agent IDs or ['*'] for all")
     priority: Optional[int] = Field(None, ge=0, le=1000, description="Policy priority (0-1000)")
     enabled: Optional[bool] = Field(None, description="Whether policy is enabled")
 
@@ -127,9 +142,22 @@ class PolicyValidationResponse(BaseModel):
 
 class PolicyCheckRequest(BaseModel):
     """Schema for policy check request"""
-    agent_id: str = Field(..., description="Agent identifier")
-    user_id: str = Field(..., description="User who triggered the agent")
-    tool_name: str = Field(..., description="Name of the tool being called")
+    agent_id: str = Field(
+        ...,
+        max_length=FIELD_LIMITS["agent_id"]["max_length"],
+        pattern=FIELD_LIMITS["agent_id"]["pattern"],
+        description="Agent identifier",
+    )
+    user_id: str = Field(
+        ...,
+        max_length=FIELD_LIMITS["user_id"]["max_length"],
+        description="User who triggered the agent",
+    )
+    tool_name: str = Field(
+        ...,
+        max_length=FIELD_LIMITS["tool_name"]["max_length"],
+        description="Name of the tool being called",
+    )
     arguments: Dict[str, Any] = Field(..., description="Tool call arguments")
     context: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional context")
     timestamp: Optional[datetime] = Field(default_factory=datetime.utcnow, description="Timestamp of the request")
