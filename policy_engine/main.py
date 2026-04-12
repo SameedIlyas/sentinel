@@ -72,6 +72,11 @@ async def lifespan(app: FastAPI):
         raise RuntimeError(
             "SECRET_KEY is a known weak default — please generate a strong key"
         )
+    # CORS production guard
+    if settings.CORS_ALLOW_ALL_ORIGINS and settings.APP_ENV == "production":
+        raise RuntimeError("CORS_ALLOW_ALL_ORIGINS=True is not allowed in production")
+    if "*" in settings.CORS_ORIGINS:
+        logger.warning("CORS_ORIGINS contains wildcard '*' — this allows all origins")
     logger.info("Starting Policy Engine service...")
     yield
     logger.info("Shutting down Policy Engine service...")
@@ -97,9 +102,9 @@ app.add_middleware(LoggingMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=settings.CORS_ALLOW_CREDENTIALS,
+    allow_methods=settings.CORS_ALLOW_METHODS,
+    allow_headers=settings.CORS_ALLOW_HEADERS,
 )
 
 # Include routers

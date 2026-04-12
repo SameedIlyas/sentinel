@@ -15,6 +15,10 @@ class Settings(BaseSettings):
 
     # CORS
     CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173"]
+    CORS_ALLOW_ALL_ORIGINS: bool = False
+    CORS_ALLOW_CREDENTIALS: bool = True
+    CORS_ALLOW_METHODS: List[str] = ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"]
+    CORS_ALLOW_HEADERS: List[str] = ["*"]
 
     # Database
     DATABASE_URL: str = "sqlite:///./sentinel.db"
