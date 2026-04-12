@@ -8,7 +8,6 @@ import sys
 from contextlib import asynccontextmanager
 
 from policy_engine.config import settings
-from policy_engine.auth.jwt_utils import validate_secret_key_for_production
 from policy_engine.middleware.logging import LoggingMiddleware
 from policy_engine.middleware.error_handler import ErrorHandlerMiddleware
 from policy_engine.middleware.rate_limiter import RateLimitMiddleware
@@ -56,10 +55,23 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+_WEAK_KEYS = {"change-me-in-production", "your-secret-key-change-this-in-production"}
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
-    validate_secret_key_for_production(settings.APP_ENV, settings.SECRET_KEY)
+    # SECRET_KEY strength checks — enforced in ALL environments
+    if not settings.SECRET_KEY:
+        raise RuntimeError("SECRET_KEY must be set")
+    if len(settings.SECRET_KEY) < settings.MIN_SECRET_KEY_LENGTH:
+        raise RuntimeError(
+            f"SECRET_KEY must be at least {settings.MIN_SECRET_KEY_LENGTH} characters"
+        )
+    if settings.SECRET_KEY in _WEAK_KEYS:
+        raise RuntimeError(
+            "SECRET_KEY is a known weak default — please generate a strong key"
+        )
     logger.info("Starting Policy Engine service...")
     yield
     logger.info("Shutting down Policy Engine service...")
