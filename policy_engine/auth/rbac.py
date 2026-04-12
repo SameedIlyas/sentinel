@@ -4,11 +4,11 @@ from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from typing import Callable, List, Optional
-import hashlib
 
 from policy_engine.database import get_db
 from policy_engine.models.user import User, UserRole, has_permission
 from policy_engine.auth.jwt_utils import decode_access_token
+from policy_engine.auth.api_key import _verify_api_key_logic
 from policy_engine.config import settings
 
 
@@ -93,18 +93,13 @@ def authenticate_request(
             if user and user.is_active:
                 return user.id
 
-    # Try API key
+    # Try API key — delegate entirely to api_key.py to avoid duplicated logic
     api_key = request.headers.get(settings.API_KEY_HEADER)
     if api_key:
-        from policy_engine.models.api_key import APIKey
-        from datetime import datetime
-        key_hash = hashlib.sha256(api_key.encode()).hexdigest()
-        api_key_record = db.query(APIKey).filter(APIKey.key == key_hash).first()
-        if api_key_record and api_key_record.is_active:
-            if not api_key_record.expires_at or api_key_record.expires_at >= datetime.utcnow():
-                api_key_record.last_used = datetime.utcnow()
-                db.commit()
-                return api_key_record.agent_id
+        try:
+            return _verify_api_key_logic(api_key, db)
+        except HTTPException:
+            raise
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
