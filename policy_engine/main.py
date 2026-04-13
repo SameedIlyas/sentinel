@@ -28,6 +28,9 @@ from policy_engine.routes.regulatory import technical_files as regulatory_techni
 from policy_engine.routes.regulatory import adverse_events as regulatory_adverse_events
 from policy_engine.routes.regulatory import pms_reports as regulatory_pms_reports
 from policy_engine.routes.regulatory import risk_scores as regulatory_risk_scores
+from policy_engine.routes import fhir as fhir_routes
+from policy_engine.routes import dicom as dicom_routes
+from policy_engine.routes import domain_events as domain_events_routes
 
 # Import clinical models so they are registered with Base
 from policy_engine.models import model_card, bias_audit, drift, hitl  # noqa: F401
@@ -42,6 +45,10 @@ from policy_engine.models import revenue_cycle as revenue_cycle_models  # noqa: 
 from policy_engine.models import technical_file as technical_file_models  # noqa: F401
 from policy_engine.models import post_market as post_market_models  # noqa: F401
 from policy_engine.models import risk_score as risk_score_models  # noqa: F401
+# Import Phase 5 models so they are registered with Base
+from policy_engine.models import fhir_cache as fhir_cache_models  # noqa: F401
+from policy_engine.models import dicom_metadata as dicom_metadata_models  # noqa: F401
+from policy_engine.routes.domain_events import DomainEvent  # noqa: F401  — registers table
 
 # Configure logging
 logging.basicConfig(
@@ -134,6 +141,9 @@ app.include_router(regulatory_technical_files.router, prefix="/v1/regulatory", t
 app.include_router(regulatory_adverse_events.router, prefix="/v1/regulatory", tags=["regulatory-adverse-events"])
 app.include_router(regulatory_pms_reports.router, prefix="/v1/regulatory", tags=["regulatory-pms-reports"])
 app.include_router(regulatory_risk_scores.router, prefix="/v1", tags=["risk-scoring"])
+app.include_router(fhir_routes.router, prefix="/v1", tags=["fhir"])
+app.include_router(dicom_routes.router, prefix="/v1", tags=["dicom"])
+app.include_router(domain_events_routes.router, prefix="/v1", tags=["domain-events"])
 
 
 @app.get("/")
