@@ -1,7 +1,9 @@
 """DICOM metadata extractor — strips all PHI tags per PS3.15 Annex E."""
+import io
 import logging
-from dataclasses import dataclass
 from typing import Any, Dict, Union
+
+import pydicom
 
 logger = logging.getLogger(__name__)
 
@@ -41,16 +43,7 @@ class DICOMExtractor:
 
     def extract_metadata(self, source: Union[str, bytes]) -> Dict[str, Any]:
         try:
-            import pydicom
-            from pydicom.errors import InvalidDicomError
-        except ImportError:
-            raise NotImplementedError(
-                "Install pydicom to use DICOM extraction: pip install pydicom"
-            )
-
-        try:
             if isinstance(source, (bytes, bytearray)):
-                import io
                 ds = pydicom.dcmread(io.BytesIO(source), stop_before_pixels=True)
             else:
                 ds = pydicom.dcmread(source, stop_before_pixels=True)
