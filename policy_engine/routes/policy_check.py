@@ -15,9 +15,24 @@ from policy_engine.models.alert_config import AlertConfig
 from policy_engine.services.alert_service import AlertService
 from policy_engine.services.slack_service import slack_service
 from policy_engine.services.agent_activity_service import AgentActivityService
+from policy_engine.infrastructure.security.phi_redaction import PHIRedactionEngine
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+_phi_engine = PHIRedactionEngine()
+
+
+def _redact_arguments(arguments: dict) -> dict:
+    """Return a copy of *arguments* with all string values PHI-redacted."""
+    redacted: dict = {}
+    for key, value in arguments.items():
+        if isinstance(value, str):
+            result = _phi_engine.redact(value)
+            redacted[key] = result.redacted_text
+        else:
+            redacted[key] = value
+    return redacted
 
 
 def create_audit_log(
@@ -26,8 +41,11 @@ def create_audit_log(
     response: PolicyCheckResponse
 ):
     """
-    Create an audit log entry for a policy check
-    
+    Create an audit log entry for a policy check.
+
+    Arguments are PHI-redacted before being written to the database to
+    ensure no HIPAA Safe Harbor identifiers are stored in the audit trail.
+
     Args:
         db: Database session
         request: Policy check request
@@ -44,13 +62,16 @@ def create_audit_log(
 
         context = request.context or {}
 
+        # Redact PHI from tool arguments before persisting
+        safe_arguments = _redact_arguments(request.arguments)
+
         audit_log = AuditLog(
             id=str(_uuid.uuid4()),
             agent_id=request.agent_id,
             agent_name=context.get('agent_name', request.agent_id),
             user_id=request.user_id,
             tool_name=request.tool_name,
-            arguments=request.arguments,
+            arguments=safe_arguments,
             system_accessed=context.get('system', 'unknown'),
             data_touched=context.get('data_touched', []),
             decision=decision_map.get(response.decision, 'blocked'),

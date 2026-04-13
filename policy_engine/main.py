@@ -8,7 +8,6 @@ import sys
 from contextlib import asynccontextmanager
 
 from policy_engine.config import settings
-from policy_engine.auth.jwt_utils import validate_secret_key_for_production
 from policy_engine.middleware.logging import LoggingMiddleware
 from policy_engine.middleware.error_handler import ErrorHandlerMiddleware
 from policy_engine.middleware.rate_limiter import RateLimitMiddleware
@@ -56,10 +55,28 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+_WEAK_KEYS = {"change-me-in-production", "your-secret-key-change-this-in-production"}
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
-    validate_secret_key_for_production(settings.APP_ENV, settings.SECRET_KEY)
+    # SECRET_KEY strength checks — enforced in ALL environments
+    if not settings.SECRET_KEY:
+        raise RuntimeError("SECRET_KEY must be set")
+    if len(settings.SECRET_KEY) < settings.MIN_SECRET_KEY_LENGTH:
+        raise RuntimeError(
+            f"SECRET_KEY must be at least {settings.MIN_SECRET_KEY_LENGTH} characters"
+        )
+    if settings.SECRET_KEY in _WEAK_KEYS:
+        raise RuntimeError(
+            "SECRET_KEY is a known weak default — please generate a strong key"
+        )
+    # CORS production guard
+    if settings.CORS_ALLOW_ALL_ORIGINS and settings.APP_ENV == "production":
+        raise RuntimeError("CORS_ALLOW_ALL_ORIGINS=True is not allowed in production")
+    if "*" in settings.CORS_ORIGINS:
+        logger.warning("CORS_ORIGINS contains wildcard '*' — this allows all origins")
     logger.info("Starting Policy Engine service...")
     yield
     logger.info("Shutting down Policy Engine service...")
@@ -85,9 +102,9 @@ app.add_middleware(LoggingMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=settings.CORS_ALLOW_CREDENTIALS,
+    allow_methods=settings.CORS_ALLOW_METHODS,
+    allow_headers=settings.CORS_ALLOW_HEADERS,
 )
 
 # Include routers
