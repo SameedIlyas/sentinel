@@ -2,7 +2,7 @@
 
 from pydantic import Field
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Optional
 
 
 class Settings(BaseSettings):
@@ -49,6 +49,16 @@ class Settings(BaseSettings):
     ARCHIVE_S3_BUCKET: str = ""             # required when ARCHIVE_BACKEND=s3
     ARCHIVE_S3_PREFIX: str = "audit-logs/"
     ARCHIVE_S3_KMS_KEY_ID: str = ""         # KMS key ARN/alias; empty = bucket default
+
+    # GitHub Integration
+    GITHUB_TOKEN: Optional[str] = None
+    GITHUB_API_BASE_URL: str = "https://api.github.com"
+    GITHUB_REQUEST_TIMEOUT_SECONDS: int = 10
+
+    # MLflow Integration
+    MLFLOW_TRACKING_URI: Optional[str] = None
+    MLFLOW_REQUEST_TIMEOUT_SECONDS: int = 10
+    MLFLOW_ALLOW_CUSTOM_PORT: bool = False
 
     class Config:
         env_file = ".env"

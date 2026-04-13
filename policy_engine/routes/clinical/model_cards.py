@@ -10,6 +10,14 @@ from policy_engine.auth.rbac import get_current_user
 from policy_engine.models.user import User, has_permission
 from policy_engine.models.model_card import ModelCard, ModelCardVersion
 from policy_engine.domain.clinical.model_card import LifecycleStage, ModelCardEntity
+from policy_engine.config import settings
+from policy_engine.services.github_integration import GitHubIntegrationService
+from policy_engine.services.mlflow_integration import MLflowIntegrationService
+from policy_engine.services.model_card_service import (
+    ModelCardAutoFillRequest,
+    ModelCardAutoFillResult,
+    ModelCardAutoFillService,
+)
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -295,3 +303,40 @@ def export_summary(
         "bias_summary": card.bias_summary or {},
         "export_timestamp": datetime.utcnow().isoformat(),
     }
+
+
+@router.post(
+    "/model-cards/{card_id}/auto-fill",
+    response_model=ModelCardAutoFillResult,
+    status_code=status.HTTP_200_OK,
+)
+async def auto_fill_model_card(
+    card_id: str,
+    payload: ModelCardAutoFillRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Auto-populate CHAI model card sections from GitHub + MLflow."""
+    _check_permission(current_user, "update")
+    _get_card_or_404(card_id, db)
+
+    github_svc = GitHubIntegrationService(
+        token=settings.GITHUB_TOKEN,
+        base_url=settings.GITHUB_API_BASE_URL,
+        timeout_seconds=settings.GITHUB_REQUEST_TIMEOUT_SECONDS,
+    )
+    mlflow_svc = MLflowIntegrationService(
+        tracking_uri=settings.MLFLOW_TRACKING_URI,
+        timeout_seconds=settings.MLFLOW_REQUEST_TIMEOUT_SECONDS,
+    )
+    service = ModelCardAutoFillService(
+        github_service=github_svc,
+        mlflow_service=mlflow_svc,
+    )
+
+    try:
+        return await service.auto_fill(payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc

@@ -200,6 +200,12 @@ class PHIRedactionEngine:
             processing_time_ms=elapsed_ms,
         )
 
+    def contains_phi(self, text: Optional[str]) -> bool:
+        """Return True if text contains PHI that would be redacted, False otherwise."""
+        if not text:
+            return False
+        return self.redact(text).redacted_text != text
+
     @staticmethod
     def content_hash(text: str) -> str:
         """SHA-256 hash of content — safe to store in logs."""
