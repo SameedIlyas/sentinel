@@ -1,0 +1,14 @@
+apiVersion: v2
+name: sentinel-ai
+description: Sentinel AI Platform — Healthcare AI Governance Suite
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - healthcare
+  - ai-governance
+  - policy-engine
+  - fhir
+  - dicom
+maintainers:
+  - name: Sentinel AI Team

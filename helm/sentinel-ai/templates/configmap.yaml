@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sentinel-ai.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "sentinel-ai.labels" . | nindent 4 }}
+data:
+  APP_ENV: {{ .Values.backend.env.APP_ENV | quote }}
+  LOG_LEVEL: {{ .Values.backend.env.LOG_LEVEL | quote }}
+  DEBUG: {{ .Values.backend.env.DEBUG | quote }}
+  ALGORITHM: {{ .Values.backend.env.ALGORITHM | quote }}
+  ACCESS_TOKEN_EXPIRE_MINUTES: {{ .Values.backend.env.ACCESS_TOKEN_EXPIRE_MINUTES | quote }}
+  RATE_LIMIT_PER_MINUTE: {{ .Values.backend.env.RATE_LIMIT_PER_MINUTE | quote }}
+  DICOM_MAX_FILE_SIZE_MB: {{ .Values.backend.env.DICOM_MAX_FILE_SIZE_MB | quote }}

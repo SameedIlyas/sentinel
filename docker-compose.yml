@@ -1,72 +1,97 @@
 version: "3.9"
 
-services:
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: sentinel
-      POSTGRES_USER: sentinel
-      POSTGRES_PASSWORD: sentinel_dev_password
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init_postgres.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sentinel"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+# =============================================================================
+# Sentinel AI Platform — Local Development Compose
+#
+# Usage:
+#   cp .env.example .env          # fill in required values
+#   docker compose up --build
+#
+# All secrets are read from .env — NEVER hardcode credentials here.
+# =============================================================================
 
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    ports:
-      - "8000:8000"
-    environment:
-      DATABASE_URL: postgresql+asyncpg://sentinel:sentinel_dev_password@postgres:5432/sentinel
-      REDIS_URL: redis://redis:6379/0
-      APP_ENV: development
-      SECRET_KEY: ${SECRET_KEY:-change-me-for-dev-only}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-  celery_worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    command: celery -A policy_engine.infrastructure.messaging.celery_config worker --loglevel=info
-    environment:
-      DATABASE_URL: postgresql+asyncpg://sentinel:sentinel_dev_password@postgres:5432/sentinel
-      REDIS_URL: redis://redis:6379/0
-      APP_ENV: development
-      SECRET_KEY: ${SECRET_KEY:-change-me-for-dev-only}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+networks:
+  sentinel-network:
+    driver: bridge
 
 volumes:
   postgres_data:
   redis_data:
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sentinel}
+      POSTGRES_USER: ${POSTGRES_USER:-sentinel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - sentinel-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sentinel}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Redis 7
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - sentinel-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ---------------------------------------------------------------------------
+  # Backend — FastAPI policy engine
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-sentinel}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-sentinel}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+    ports:
+      - "8000:8000"
+    networks:
+      - sentinel-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # Frontend — React/Vite SPA served via nginx
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    networks:
+      - sentinel-network
+    depends_on:
+      - backend

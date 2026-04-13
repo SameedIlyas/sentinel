@@ -1,0 +1,62 @@
+# =============================================================================
+# Stage 1: builder — install Python dependencies
+# =============================================================================
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy dependency files first for layer caching
+COPY pyproject.toml policy_engine/requirements.txt ./
+
+# Create virtual environment and install dependencies
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install --upgrade pip --no-cache-dir \
+    && pip install --no-cache-dir -r requirements.txt
+
+
+# =============================================================================
+# Stage 2: runtime — minimal production image
+# =============================================================================
+FROM python:3.11-slim AS runtime
+
+# Install only runtime system libraries (libpq for psycopg2)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Create non-root user sentinel (UID 1000)
+RUN groupadd --gid 1000 sentinel \
+    && useradd --uid 1000 --gid sentinel --shell /bin/bash --create-home sentinel
+
+WORKDIR /app
+
+# Copy only required application code — no .env, tests, or dev tooling
+COPY policy_engine/ ./policy_engine/
+COPY sentinel/ ./sentinel/
+COPY alembic/ ./alembic/
+COPY alembic.ini ./
+
+# Set ownership
+RUN chown -R sentinel:sentinel /app
+
+# Switch to non-root user
+USER sentinel
+
+EXPOSE 8000
+
+# HEALTHCHECK using Python stdlib — slim images don't have curl
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+
+CMD ["python", "-m", "uvicorn", "policy_engine.main:app", "--host", "0.0.0.0", "--port", "8000"]
