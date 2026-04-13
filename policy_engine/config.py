@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     MLFLOW_REQUEST_TIMEOUT_SECONDS: int = 10
     MLFLOW_ALLOW_CUSTOM_PORT: bool = False
 
+    # DICOM Integration
+    DICOM_MAX_FILE_SIZE_MB: int = 50
+
     class Config:
         env_file = ".env"
         case_sensitive = True
