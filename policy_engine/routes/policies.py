@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime
 
 from policy_engine.database import get_db
-from policy_engine.auth.api_key import get_current_agent
+from policy_engine.auth.rbac import authenticate_request as get_current_agent
 from policy_engine.models.policy import Policy
 from policy_engine.models.schemas import (
     PolicyCreate,
