@@ -84,8 +84,54 @@ async def lifespan(app: FastAPI):
     if "*" in settings.CORS_ORIGINS:
         logger.warning("CORS_ORIGINS contains wildcard '*' — this allows all origins")
     logger.info("Starting Policy Engine service...")
-    yield
-    logger.info("Shutting down Policy Engine service...")
+
+    # ── Tier 2 Sprint 2-5: register periodic background jobs ────────────────
+    from policy_engine.services.scheduler import get_scheduler
+    from policy_engine.services import (
+        drift_ingestion,
+        mlflow_auto_sync,
+        pms_auto_service,
+        risk_recompute,
+    )
+
+    scheduler = get_scheduler()
+    if mlflow_auto_sync.is_enabled():
+        scheduler.register(
+            name="mlflow_auto_sync",
+            interval_seconds=mlflow_auto_sync.sync_interval_seconds(),
+            initial_delay_seconds=30.0,
+            func=mlflow_auto_sync.make_sync_job(
+                tracking_uri=settings.MLFLOW_TRACKING_URI,
+            ),
+        )
+    if risk_recompute.is_enabled():
+        scheduler.register(
+            name="risk_recompute",
+            interval_seconds=risk_recompute.recompute_interval_seconds(),
+            initial_delay_seconds=120.0,
+            func=risk_recompute.make_recompute_job(),
+        )
+    if pms_auto_service.is_enabled():
+        scheduler.register(
+            name="pms_auto_generate",
+            interval_seconds=pms_auto_service.auto_interval_seconds(),
+            initial_delay_seconds=180.0,
+            func=pms_auto_service.make_auto_generate_job(),
+        )
+    if drift_ingestion.is_recompute_enabled():
+        scheduler.register(
+            name="drift_auto_recompute",
+            interval_seconds=drift_ingestion.recompute_interval_seconds(),
+            initial_delay_seconds=240.0,
+            func=drift_ingestion.make_recompute_job(),
+        )
+    scheduler.start()
+
+    try:
+        yield
+    finally:
+        logger.info("Shutting down Policy Engine service...")
+        await scheduler.stop()
 
 
 # Create FastAPI application
