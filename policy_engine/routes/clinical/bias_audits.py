@@ -9,7 +9,9 @@ from policy_engine.database import get_db
 from policy_engine.auth.rbac import get_current_user
 from policy_engine.models.user import User, has_permission
 from policy_engine.models.bias_audit import BiasAuditModel, BiasAuditResultModel
+from policy_engine.models.model_card import ModelCard
 from policy_engine.domain.clinical.bias_audit import run_bias_audit
+from policy_engine.services.hitl_auto_service import create_hitl_review
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -169,10 +171,64 @@ def run_bias_audit_endpoint(
         db.commit()
         db.refresh(audit)
 
+        # Tier 2 Sprint 3 — auto-create HITL review when any subgroup fails the
+        # 80% (or inverse 4/5ths for FPR) rule. Compliance officer + ML team get
+        # paged into the queue automatically.
+        failing = [r for r in results if not r.passes_80_percent_rule]
+        hitl_review_id = None
+        if failing:
+            worst = min(failing, key=lambda r: r.disparity_ratio)
+            org_id = None
+            if audit.model_card_id:
+                card = (
+                    db.query(ModelCard)
+                    .filter(ModelCard.id == audit.model_card_id)
+                    .first()
+                )
+                if card:
+                    org_id = card.organization_id
+
+            hitl_review_id = create_hitl_review(
+                db,
+                title=(
+                    f"Bias audit failure: {audit.audit_name} "
+                    f"({len(failing)} failing subgroup(s))"
+                ),
+                description=(
+                    f"Bias audit '{audit.audit_name}' completed with "
+                    f"{len(failing)} failing subgroup(s). "
+                    f"Worst disparity: {worst.subgroup} "
+                    f"{worst.metric_name}={worst.metric_value:.3f} "
+                    f"(ratio={worst.disparity_ratio:.3f}). "
+                    "Review and either remediate or document an approved exception."
+                ),
+                ai_decision={
+                    "source": "bias_audit_failure",
+                    "audit_id": audit_id,
+                    "model_card_id": audit.model_card_id,
+                    "failing_subgroups": [
+                        {
+                            "subgroup": r.subgroup,
+                            "metric_name": r.metric_name,
+                            "metric_value": r.metric_value,
+                            "disparity_ratio": r.disparity_ratio,
+                        }
+                        for r in failing
+                    ],
+                },
+                risk_score=80.0 if worst.disparity_ratio < 0.5 else 60.0,
+                priority="urgent" if worst.disparity_ratio < 0.5 else "high",
+                organization_id=org_id,
+                actor_id="system:bias_audit",
+                seed_action="bias_audit_failure",
+            )
+
         return {
             "audit_id": audit_id,
             "status": "complete",
             "results_count": len(results),
+            "failing_subgroups": len(failing),
+            "hitl_review_id": hitl_review_id,
             "results": [
                 {
                     "subgroup": r.subgroup,
