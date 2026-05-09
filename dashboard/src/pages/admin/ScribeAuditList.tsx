@@ -19,6 +19,7 @@ import EditNoteIcon from '@mui/icons-material/EditNote';
 import { useQuery } from '@tanstack/react-query';
 import { listScribeAudits } from '@/api/healthcare';
 import type { ScribeAuditStatus } from '@/types';
+import EmptyState from '@/components/common/EmptyState';
 
 const STATUS_FILTERS: Array<ScribeAuditStatus | 'all'> = ['all', 'pass', 'warning', 'fail'];
 
@@ -95,10 +96,10 @@ const ScribeAuditList: React.FC = () => {
           <TableHead>
             <TableRow>
               <TableCell>Audited At</TableCell>
-              <TableCell>Encounter ID</TableCell>
+              <TableCell>Session</TableCell>
               <TableCell sx={{ minWidth: 150 }}>Completeness</TableCell>
               <TableCell>Hallucination</TableCell>
-              <TableCell>ICD-10 Accuracy</TableCell>
+              <TableCell>Attribution</TableCell>
               <TableCell>Findings</TableCell>
               <TableCell>Status</TableCell>
             </TableRow>
@@ -117,51 +118,85 @@ const ScribeAuditList: React.FC = () => {
               : items.length === 0
               ? (
                   <TableRow>
-                    <TableCell colSpan={7} align="center">
-                      <Typography variant="body2" color="text.secondary" sx={{ py: 3 }}>
-                        No scribe audits found
-                      </Typography>
+                    <TableCell colSpan={7} sx={{ p: 0, border: 0 }}>
+                      <EmptyState
+                        title={statusFilter !== 'all' ? `No ${statusFilter} audits` : 'No scribe audits yet'}
+                        description="Scribe audits check AI-generated clinical notes (Nuance DAX, Abridge, Nabla) for hallucinations, completeness, and attribution against the source encounter audio."
+                        ingestHint="Today: POST audits manually via /v1/admin/scribe-audits. Roadmap: Epic / Cerner pre-signature webhook + LLM fact-checker. See docs/ROADMAP_TIER3_NO_DATA_SOURCE.md."
+                        icon={<EditNoteIcon />}
+                      />
                     </TableCell>
                   </TableRow>
                 )
-              : items.map((audit) => (
-                  <TableRow key={audit.id} hover>
-                    <TableCell>
-                      {new Date(audit.audited_at).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell>{audit.encounter_id}</TableCell>
-                    <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <LinearProgress
-                          variant="determinate"
-                          value={audit.completeness_score}
-                          sx={{ flexGrow: 1, height: 8, borderRadius: 4 }}
+              : items.map((audit) => {
+                  // Backend returns: session_id, completeness_score (0..100),
+                  // attribution_score (0..100), hallucination_detected,
+                  // audit_score, status, created_at, completed_at.
+                  // The TS type lists encounter_id / audited_at / icd10_accuracy
+                  // — those don't exist server-side. Tolerate both shapes.
+                  const r = audit as unknown as {
+                    id: string;
+                    session_id?: string;
+                    encounter_id?: string;
+                    audited_at?: string;
+                    created_at?: string;
+                    completed_at?: string;
+                    completeness_score?: number;
+                    attribution_score?: number;
+                    icd10_accuracy?: number;
+                    hallucination_detected?: boolean;
+                    findings_count?: number;
+                    findings?: unknown[];
+                    status?: string;
+                  };
+                  const ts = r.audited_at ?? r.completed_at ?? r.created_at;
+                  const auditedAt = ts ? new Date(ts).toLocaleString() : '—';
+                  const session = r.session_id ?? r.encounter_id ?? '—';
+                  const completeness = typeof r.completeness_score === 'number' ? r.completeness_score : 0;
+                  const attribution = typeof r.attribution_score === 'number' ? r.attribution_score
+                    : typeof r.icd10_accuracy === 'number' ? r.icd10_accuracy
+                    : null;
+                  const findingsCount =
+                    typeof r.findings_count === 'number'
+                      ? r.findings_count
+                      : Array.isArray(r.findings) ? r.findings.length : '—';
+                  return (
+                    <TableRow key={r.id} hover>
+                      <TableCell sx={{ whiteSpace: 'nowrap' }}>{auditedAt}</TableCell>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{session}</TableCell>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <LinearProgress
+                            variant="determinate"
+                            value={Math.min(100, Math.max(0, completeness))}
+                            sx={{ flexGrow: 1, height: 8, borderRadius: 4 }}
+                          />
+                          <Typography variant="caption" sx={{ whiteSpace: 'nowrap' }}>
+                            {Math.round(completeness)}%
+                          </Typography>
+                        </Box>
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={r.hallucination_detected ? 'Detected' : 'None'}
+                          color={r.hallucination_detected ? 'error' : 'success'}
+                          size="small"
                         />
-                        <Typography variant="caption" sx={{ whiteSpace: 'nowrap' }}>
-                          {audit.completeness_score}%
-                        </Typography>
-                      </Box>
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={audit.hallucination_detected ? 'Detected' : 'None'}
-                        color={audit.hallucination_detected ? 'error' : 'success'}
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      {audit.icd10_accuracy != null ? `${audit.icd10_accuracy}%` : '—'}
-                    </TableCell>
-                    <TableCell>{audit.findings_count}</TableCell>
-                    <TableCell>
-                      <Chip
-                        label={audit.status}
-                        color={statusColor(audit.status)}
-                        size="small"
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      </TableCell>
+                      <TableCell>
+                        {attribution != null ? `${Math.round(attribution)}%` : '—'}
+                      </TableCell>
+                      <TableCell>{findingsCount}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={r.status ?? 'pending'}
+                          color={statusColor((r.status ?? 'pending') as never)}
+                          size="small"
+                        />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
           </TableBody>
         </Table>
         <TablePagination

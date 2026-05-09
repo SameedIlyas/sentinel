@@ -19,6 +19,7 @@ import SecurityIcon from '@mui/icons-material/Security';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { listShadowAIDetections, allowlistShadowAI } from '@/api/healthcare';
 import type { ShadowAISeverity } from '@/types';
+import EmptyState from '@/components/common/EmptyState';
 
 const SEVERITY_FILTERS: Array<ShadowAISeverity | 'all'> = ['all', 'low', 'medium', 'high', 'critical'];
 
@@ -124,59 +125,99 @@ const ShadowAIDiscovery: React.FC = () => {
               : items.length === 0
               ? (
                   <TableRow>
-                    <TableCell colSpan={8} align="center">
-                      <Typography variant="body2" color="text.secondary" sx={{ py: 3 }}>
-                        No shadow AI detections found
-                      </Typography>
+                    <TableCell colSpan={8} sx={{ p: 0, border: 0 }}>
+                      <EmptyState
+                        title={severityFilter !== 'all' ? `No ${severityFilter}-severity detections` : 'No shadow AI detected yet'}
+                        description="Shadow AI = unauthorized AI tools (ChatGPT, Claude, Gemini, etc.) being used outside your governance perimeter, often with PHI exposure risk."
+                        ingestHint="Detection requires a network/API-gateway integration (Cloudflare Zero Trust, Zscaler, Netskope, Palo Alto NGFW) to forward egress logs. See docs/ROADMAP_TIER3_NO_DATA_SOURCE.md for the integration plan."
+                        icon={<SecurityIcon />}
+                      />
                     </TableCell>
                   </TableRow>
                 )
-              : items.map((detection) => (
-                  <TableRow key={detection.id} hover>
-                    <TableCell>
-                      {new Date(detection.detected_at).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell>{detection.detected_tool}</TableCell>
-                    <TableCell>{detection.endpoint_domain}</TableCell>
-                    <TableCell>{detection.staff_ip ?? '—'}</TableCell>
-                    <TableCell>
-                      <Chip
-                        label={detection.hipaa_risk ? 'YES' : 'NO'}
-                        color={detection.hipaa_risk ? 'error' : 'success'}
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={detection.severity}
-                        color={severityColor(detection.severity)}
-                        size="small"
-                        sx={
-                          detection.severity === 'critical'
-                            ? { backgroundColor: 'error.dark', color: 'error.contrastText' }
-                            : undefined
-                        }
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={detection.allowlisted ? 'Allowlisted' : 'Active'}
-                        color={detection.allowlisted ? 'success' : 'default'}
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        disabled={detection.allowlisted || allowlistMutation.isPending}
-                        onClick={() => allowlistMutation.mutate(detection.id)}
-                      >
-                        Allowlist
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+              : items.map((detection) => {
+                  // Backend returns: ai_provider, destination_host, source_ip,
+                  // phi_risk_level ("none"/"low"/"medium"/"high"), status
+                  // ("detected"/"investigating"/"approved"/"blocked"). The TS
+                  // type names are different — read both shapes here.
+                  const r = detection as unknown as {
+                    id: string;
+                    detected_at?: string;
+                    detected_tool?: string;
+                    ai_provider?: string;
+                    endpoint_domain?: string;
+                    destination_host?: string;
+                    staff_ip?: string;
+                    source_ip?: string;
+                    hipaa_risk?: boolean;
+                    phi_risk_level?: string;
+                    severity?: string;
+                    allowlisted?: boolean;
+                    status?: string;
+                    department?: string;
+                  };
+                  const tool = r.detected_tool ?? r.ai_provider ?? '—';
+                  const domain = r.endpoint_domain ?? r.destination_host ?? '—';
+                  const ip = r.staff_ip ?? r.source_ip ?? '—';
+                  const phiRisk = r.phi_risk_level ?? (r.hipaa_risk ? 'high' : 'none');
+                  const phiHigh = phiRisk === 'high';
+                  // Severity falls out of phi_risk_level when no explicit field exists
+                  const severity =
+                    r.severity
+                    ?? (phiRisk === 'high'   ? 'high'
+                       : phiRisk === 'medium' ? 'medium'
+                       : phiRisk === 'low'    ? 'low'
+                       : 'low');
+                  const isAllowlisted = r.allowlisted === true || r.status === 'approved';
+                  const status = r.status ?? (isAllowlisted ? 'approved' : 'detected');
+                  const detectedAt = r.detected_at
+                    ? new Date(r.detected_at).toLocaleDateString()
+                    : '—';
+                  return (
+                    <TableRow key={r.id} hover>
+                      <TableCell>{detectedAt}</TableCell>
+                      <TableCell>{tool}</TableCell>
+                      <TableCell>{domain}</TableCell>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{ip}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={phiHigh ? 'HIGH' : phiRisk.toUpperCase()}
+                          color={phiHigh ? 'error' : phiRisk === 'medium' ? 'warning' : 'success'}
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={severity}
+                          color={severityColor(severity as ShadowAISeverity)}
+                          size="small"
+                          sx={
+                            severity === 'critical'
+                              ? { backgroundColor: 'error.dark', color: 'error.contrastText' }
+                              : undefined
+                          }
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={status}
+                          color={isAllowlisted ? 'success' : status === 'blocked' ? 'error' : 'default'}
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          disabled={isAllowlisted || allowlistMutation.isPending}
+                          onClick={() => allowlistMutation.mutate(r.id)}
+                        >
+                          {isAllowlisted ? 'Allowlisted' : 'Allowlist'}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
           </TableBody>
         </Table>
         <TablePagination
