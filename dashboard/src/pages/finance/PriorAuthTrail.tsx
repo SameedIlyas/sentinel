@@ -8,6 +8,7 @@ import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { listPriorAuthRecords, verifyPriorAuthChain } from '@/api/healthcare';
+import EmptyState from '@/components/common/EmptyState';
 
 type DecisionColor = 'success' | 'error' | 'warning' | 'default';
 
@@ -107,10 +108,15 @@ const PriorAuthTrail: React.FC = () => {
                     ))}
                   </TableRow>
                 ))
-              ) : !data || data.items.length === 0 ? (
+              ) : !data || !Array.isArray(data.items) || data.items.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} align="center" sx={{ py: 4 }}>
-                    <Typography color="text.secondary">No prior authorization records found</Typography>
+                  <TableCell colSpan={9} sx={{ p: 0, border: 0 }}>
+                    <EmptyState
+                      title="No prior auth decisions yet"
+                      description="An immutable hash-chained log of every AI-assisted prior-authorization decision. Each record is linked to the previous one by SHA-256 — tampering breaks the chain."
+                      ingestHint="Records are written automatically when your AI prior-auth service POSTs to /v1/finance/prior-auth (CMS-0057-F compliant). The chain is verified on demand and on a daily schedule."
+                      icon={<AccountTreeIcon />}
+                    />
                   </TableCell>
                 </TableRow>
               ) : (
@@ -124,14 +130,19 @@ const PriorAuthTrail: React.FC = () => {
                     </TableCell>
                     <TableCell>{record.service_type ?? '—'}</TableCell>
                     <TableCell sx={{ maxWidth: 200 }}>
-                      <Typography variant="body2" noWrap title={record.ai_recommendation}>
-                        {record.ai_recommendation.length > 50
-                          ? record.ai_recommendation.slice(0, 50) + '…'
-                          : record.ai_recommendation}
-                      </Typography>
+                      {(() => {
+                        const rec = record.ai_recommendation ?? '—';
+                        return (
+                          <Typography variant="body2" noWrap title={rec}>
+                            {rec.length > 50 ? rec.slice(0, 50) + '…' : rec}
+                          </Typography>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
-                      {(record.ai_confidence * 100).toFixed(0)}%
+                      {typeof record.ai_confidence === 'number' && Number.isFinite(record.ai_confidence)
+                        ? `${(record.ai_confidence * 100).toFixed(0)}%`
+                        : '—'}
                     </TableCell>
                     <TableCell>
                       <Chip

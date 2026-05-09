@@ -8,6 +8,7 @@ import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import { useQuery } from '@tanstack/react-query';
 import { listRevenueCycleAudits } from '@/api/healthcare';
 import { RevenueCycleAudit as RevenueCycleAuditType } from '@/types/index';
+import EmptyState from '@/components/common/EmptyState';
 
 function riskScoreColor(score: number): 'error' | 'warning' | 'success' {
   if (score > 70) return 'error';
@@ -55,8 +56,9 @@ const RevenueCycleAudit: React.FC = () => {
     setPage(0);
   };
 
-  const flaggedCount = data ? countFlagged(data.items) : 0;
-  const cleanCount = data ? data.items.length - flaggedCount : 0;
+  const items = Array.isArray(data?.items) ? data!.items : [];
+  const flaggedCount = countFlagged(items);
+  const cleanCount = items.length - flaggedCount;
 
   return (
     <Box>
@@ -117,16 +119,39 @@ const RevenueCycleAudit: React.FC = () => {
                     ))}
                   </TableRow>
                 ))
-              ) : !data || data.items.length === 0 ? (
+              ) : items.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
-                    <Typography color="text.secondary">No audit records found</Typography>
+                  <TableCell colSpan={7} sx={{ p: 0, border: 0 }}>
+                    <EmptyState
+                      title="No claims audited yet"
+                      description="Each claim is scored for upcoding, unbundling, and modifier misuse risk against CMS national billing benchmarks. Anything above 0.7 is flagged for human review."
+                      ingestHint="Audits are created when your billing pipeline POSTs claim metadata to /v1/finance/revenue-cycle. Roadmap: automatic scoring against the bundled coding-benchmarks dataset (CMS Medicare 2025)."
+                      icon={<AttachMoneyIcon />}
+                    />
                   </TableCell>
                 </TableRow>
               ) : (
-                data.items.map((audit) => {
+                items.map((audit) => {
                   const scoreColor = riskScoreColor(audit.risk_score);
                   const barColor = riskScoreBarColor(audit.risk_score);
+                  // Backend stores findings as list[{type, severity, description}]
+                  // — derive flag counts by counting matching types.
+                  const findings = (audit as unknown as {
+                    findings?: Array<{ type?: string; finding_type?: string }>;
+                  }).findings;
+                  const findingsList = Array.isArray(findings) ? findings : [];
+                  const countOf = (kind: string): number => {
+                    const fromExplicit = (audit as unknown as Record<string, unknown>)[
+                      `${kind}_flags`
+                    ];
+                    if (typeof fromExplicit === 'number') return fromExplicit;
+                    return findingsList.filter(
+                      (f) => (f.type ?? f.finding_type) === kind,
+                    ).length;
+                  };
+                  const upcoding = countOf('upcoding');
+                  const unbundling = countOf('unbundling');
+                  const modifier = countOf('modifier');
                   return (
                     <TableRow key={audit.id} hover>
                       <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
@@ -148,18 +173,39 @@ const RevenueCycleAudit: React.FC = () => {
                           </Typography>
                         </Box>
                       </TableCell>
-                      <TableCell><FlagCell count={audit.upcoding_flags} /></TableCell>
-                      <TableCell><FlagCell count={audit.unbundling_flags} /></TableCell>
-                      <TableCell><FlagCell count={audit.modifier_flags} /></TableCell>
+                      <TableCell><FlagCell count={upcoding} /></TableCell>
+                      <TableCell><FlagCell count={unbundling} /></TableCell>
+                      <TableCell><FlagCell count={modifier} /></TableCell>
                       <TableCell sx={{ maxWidth: 220 }}>
-                        <Typography variant="body2" noWrap title={audit.recommendation}>
-                          {audit.recommendation.length > 50
-                            ? audit.recommendation.slice(0, 50) + '…'
-                            : audit.recommendation}
-                        </Typography>
+                        {(() => {
+                          // Backend returns `findings` (list of {type, severity, description});
+                          // older API returned a single `recommendation` string. Render either.
+                          const findings = (audit as unknown as {
+                            findings?: Array<{ description?: string }>;
+                          }).findings;
+                          const recText: string =
+                            typeof audit.recommendation === 'string' && audit.recommendation
+                              ? audit.recommendation
+                              : Array.isArray(findings) && findings.length > 0
+                                ? findings.map((f) => f?.description ?? '').filter(Boolean).join('; ')
+                                : '—';
+                          const display = recText.length > 50
+                            ? recText.slice(0, 50) + '…'
+                            : recText;
+                          return (
+                            <Typography variant="body2" noWrap title={recText}>
+                              {display}
+                            </Typography>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                        {new Date(audit.audited_at).toLocaleDateString()}
+                        {(() => {
+                          const ts =
+                            audit.audited_at
+                            ?? (audit as unknown as { created_at?: string }).created_at;
+                          return ts ? new Date(ts).toLocaleDateString() : '—';
+                        })()}
                       </TableCell>
                     </TableRow>
                   );
