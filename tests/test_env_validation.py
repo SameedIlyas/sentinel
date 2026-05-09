@@ -50,22 +50,36 @@ def _reload_settings(env_overrides: dict) -> None:
 # ---------------------------------------------------------------------------
 
 class TestEnvValidation:
-    def test_app_crashes_if_secret_key_missing(self) -> None:
-        """Application must refuse to start when SECRET_KEY is not set."""
-        # Remove SECRET_KEY from environment entirely
-        env = {k: v for k, v in os.environ.items() if k != "SECRET_KEY"}
-        original = os.environ.copy()
+    def test_app_crashes_if_secret_key_missing(self, tmp_path) -> None:
+        """Application must refuse to start when SECRET_KEY is not set.
+
+        We chdir to an isolated tmp directory so pydantic-settings cannot
+        auto-load the project root .env (which carries a local SECRET_KEY),
+        and remove SECRET_KEY from os.environ. Re-importing policy_engine.config
+        must then raise a ValidationError because SECRET_KEY = Field(...) has
+        no default.
+
+        We restore env+cwd manually in a try/finally so subsequent tests see
+        a healthy Settings() instance.
+        """
+        from pydantic import ValidationError
+
+        original_env = os.environ.copy()
+        original_cwd = os.getcwd()
         try:
-            os.environ.clear()
-            os.environ.update(env)
+            os.chdir(tmp_path)
+            os.environ.pop("SECRET_KEY", None)
+
             for mod_name in list(sys.modules.keys()):
                 if "policy_engine.config" in mod_name:
                     del sys.modules[mod_name]
-            with pytest.raises((ValueError, Exception)):
+
+            with pytest.raises((ValidationError, ValueError)):
                 importlib.import_module("policy_engine.config")
         finally:
+            os.chdir(original_cwd)
             os.environ.clear()
-            os.environ.update(original)
+            os.environ.update(original_env)
             for mod_name in list(sys.modules.keys()):
                 if "policy_engine.config" in mod_name:
                     del sys.modules[mod_name]
