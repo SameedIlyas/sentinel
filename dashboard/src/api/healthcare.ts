@@ -21,6 +21,51 @@ import {
   PaginatedResponse,
 } from '@/types';
 
+/**
+ * Normalise list responses.
+ *
+ * Some Sentinel list endpoints return a bare array, others return a
+ * `PaginatedResponse<T>`. The dashboard pages all expect the paginated
+ * shape (`{ items, total, page, page_size, total_pages }`), so this helper
+ * coerces both forms into the same envelope. Without this, bare-array
+ * responses produce `data.items === undefined`, which the pages render as
+ * empty state — the bug that was hiding every dashboard's data.
+ */
+function toPaginated<T>(
+  raw: T[] | PaginatedResponse<T> | null | undefined,
+  page = 1,
+  pageSize = 100,
+): PaginatedResponse<T> {
+  if (Array.isArray(raw)) {
+    return {
+      items: raw,
+      total: raw.length,
+      page,
+      page_size: pageSize,
+      total_pages: Math.max(1, Math.ceil(raw.length / Math.max(1, pageSize))),
+    };
+  }
+  if (raw && Array.isArray((raw as PaginatedResponse<T>).items)) {
+    const r = raw as PaginatedResponse<T>;
+    return {
+      items: r.items,
+      total: typeof r.total === 'number' ? r.total : r.items.length,
+      page: r.page ?? page,
+      page_size: r.page_size ?? pageSize,
+      total_pages:
+        r.total_pages ??
+        Math.max(1, Math.ceil((r.total ?? r.items.length) / Math.max(1, r.page_size ?? pageSize))),
+    };
+  }
+  return {
+    items: [],
+    total: 0,
+    page,
+    page_size: pageSize,
+    total_pages: 1,
+  };
+}
+
 // ============================================================
 // Model Cards
 // ============================================================
@@ -30,28 +75,108 @@ export async function listModelCards(params?: {
   page?: number;
   page_size?: number;
 }): Promise<PaginatedResponse<ModelCard>> {
-  return apiClient.get<PaginatedResponse<ModelCard>>('/v2/clinical/model-cards', params);
+  const raw = await apiClient.get<ModelCard[] | PaginatedResponse<ModelCard>>(
+    '/v1/clinical/model-cards',
+    params,
+  );
+  return toPaginated<ModelCard>(raw, params?.page, params?.page_size);
 }
 
 export async function getModelCard(id: string): Promise<ModelCard> {
-  return apiClient.get<ModelCard>(`/v2/clinical/model-cards/${id}`);
+  return apiClient.get<ModelCard>(`/v1/clinical/model-cards/${id}`);
 }
 
 export async function createModelCard(
   data: Omit<ModelCard, 'id' | 'created_at' | 'updated_at' | 'created_by'>
 ): Promise<ModelCard> {
-  return apiClient.post<ModelCard>('/v2/clinical/model-cards', data);
+  return apiClient.post<ModelCard>('/v1/clinical/model-cards', data);
 }
 
 export async function updateModelCard(
   id: string,
   data: Partial<ModelCard>
 ): Promise<ModelCard> {
-  return apiClient.put<ModelCard>(`/v2/clinical/model-cards/${id}`, data);
+  return apiClient.put<ModelCard>(`/v1/clinical/model-cards/${id}`, data);
 }
 
 export async function publishModelCard(id: string): Promise<ModelCard> {
-  return apiClient.post<ModelCard>(`/v2/clinical/model-cards/${id}/publish`);
+  return apiClient.post<ModelCard>(`/v1/clinical/model-cards/${id}/publish`);
+}
+
+// ─── Auto-fill ──────────────────────────────────────────────
+export interface ModelCardAutoFillRequest {
+  repo_url: string;
+  mlflow_run_id?: string;
+  experiment_id?: string;
+}
+
+export interface ModelCardAutoFillResult {
+  pre_filled: Record<string, any>;
+  requires_human_review: string[];
+}
+
+export async function autoFillModelCard(
+  id: string,
+  request: ModelCardAutoFillRequest
+): Promise<ModelCardAutoFillResult> {
+  return apiClient.post<ModelCardAutoFillResult>(
+    `/v1/clinical/model-cards/${id}/auto-fill`,
+    request
+  );
+}
+
+// ─── CHAI compliance scorecard ──────────────────────────────
+export interface CHAISection {
+  key: string;
+  label: string;
+  status: 'complete' | 'partial' | 'missing';
+  detail?: string | null;
+}
+
+export interface CHAICompliance {
+  card_id: string;
+  score: number;
+  total: number;
+  percent: number;
+  sections: CHAISection[];
+  publishable: boolean;
+  blockers: string[];
+}
+
+export async function getCHAICompliance(id: string): Promise<CHAICompliance> {
+  return apiClient.get<CHAICompliance>(`/v1/clinical/model-cards/${id}/chai-compliance`);
+}
+
+// ─── Related governance artifacts ──────────────────────────
+export interface RelatedArtifact {
+  kind: string;
+  id: string;
+  title: string;
+  status?: string | null;
+  severity?: string | null;
+  timestamp?: string | null;
+}
+
+export interface RelatedArtifacts {
+  card_id: string;
+  bias_audits: RelatedArtifact[];
+  drift_baselines: RelatedArtifact[];
+  drift_alerts: RelatedArtifact[];
+  adverse_events: RelatedArtifact[];
+  risk_scores: RelatedArtifact[];
+  transparency_records: RelatedArtifact[];
+}
+
+export async function getRelatedArtifacts(id: string): Promise<RelatedArtifacts> {
+  return apiClient.get<RelatedArtifacts>(`/v1/clinical/model-cards/${id}/related`);
+}
+
+// ─── Export (JSON-LD or Markdown) ──────────────────────────
+export async function exportModelCard(
+  id: string,
+  fmt: 'json-ld' | 'markdown' = 'json-ld'
+): Promise<any> {
+  return apiClient.get(`/v1/clinical/model-cards/${id}/export`, { fmt });
 }
 
 // ============================================================
@@ -63,15 +188,18 @@ export async function listBiasAudits(params?: {
   status?: string;
   page?: number;
 }): Promise<PaginatedResponse<BiasAudit>> {
-  return apiClient.get<PaginatedResponse<BiasAudit>>('/v2/clinical/bias-audits', params);
+  const raw = await apiClient.get<BiasAudit[] | PaginatedResponse<BiasAudit>>(
+    '/v1/clinical/bias-audits', params,
+  );
+  return toPaginated<BiasAudit>(raw, params?.page);
 }
 
 export async function getBiasAudit(id: string): Promise<BiasAudit> {
-  return apiClient.get<BiasAudit>(`/v2/clinical/bias-audits/${id}`);
+  return apiClient.get<BiasAudit>(`/v1/clinical/bias-audits/${id}`);
 }
 
 export async function runBiasAudit(id: string): Promise<BiasAudit> {
-  return apiClient.post<BiasAudit>(`/v2/clinical/bias-audits/${id}/run`);
+  return apiClient.post<BiasAudit>(`/v1/clinical/bias-audits/${id}/run`);
 }
 
 // ============================================================
@@ -82,13 +210,18 @@ export async function listDriftMeasurements(params?: {
   model_card_id?: string;
   status?: string;
 }): Promise<PaginatedResponse<DriftMeasurement>> {
-  return apiClient.get<PaginatedResponse<DriftMeasurement>>('/v2/clinical/drift/measurements', params);
+  // Backend exposes drift alerts (the queryable list); /measure is the POST trigger.
+  const raw = await apiClient.get<DriftMeasurement[] | PaginatedResponse<DriftMeasurement>>(
+    '/v1/clinical/drift/alerts', params,
+  );
+  return toPaginated<DriftMeasurement>(raw);
 }
 
 export async function listDriftBaselines(modelCardId: string): Promise<PaginatedResponse<DriftBaseline>> {
-  return apiClient.get<PaginatedResponse<DriftBaseline>>('/v2/clinical/drift/baselines', {
-    model_card_id: modelCardId,
-  });
+  const raw = await apiClient.get<DriftBaseline[] | PaginatedResponse<DriftBaseline>>(
+    '/v1/clinical/drift/baselines', { model_card_id: modelCardId },
+  );
+  return toPaginated<DriftBaseline>(raw);
 }
 
 // ============================================================
@@ -100,11 +233,14 @@ export async function listHITLReviews(params?: {
   page?: number;
   page_size?: number;
 }): Promise<PaginatedResponse<HITLReview>> {
-  return apiClient.get<PaginatedResponse<HITLReview>>('/v2/clinical/hitl', params);
+  const raw = await apiClient.get<HITLReview[] | PaginatedResponse<HITLReview>>(
+    '/v1/clinical/hitl/reviews', params,
+  );
+  return toPaginated<HITLReview>(raw, params?.page, params?.page_size);
 }
 
 export async function getHITLReview(id: string): Promise<HITLReview> {
-  return apiClient.get<HITLReview>(`/v2/clinical/hitl/${id}`);
+  return apiClient.get<HITLReview>(`/v1/clinical/hitl/reviews/${id}`);
 }
 
 export async function submitHITLDecision(
@@ -115,7 +251,9 @@ export async function submitHITLDecision(
     reviewer_notes?: string;
   }
 ): Promise<HITLReview> {
-  return apiClient.post<HITLReview>(`/v2/clinical/hitl/${id}/decision`, decision);
+  // Backend splits the decision into approve / reject endpoints.
+  const action = decision.status === 'rejected' ? 'reject' : 'approve';
+  return apiClient.post<HITLReview>(`/v1/clinical/hitl/reviews/${id}/${action}`, decision);
 }
 
 // ============================================================
@@ -126,11 +264,17 @@ export async function listShadowAIDetections(params?: {
   severity?: string;
   page?: number;
 }): Promise<PaginatedResponse<ShadowAIDetection>> {
-  return apiClient.get<PaginatedResponse<ShadowAIDetection>>('/v2/admin/shadow-ai', params);
+  const raw = await apiClient.get<ShadowAIDetection[] | PaginatedResponse<ShadowAIDetection>>(
+    '/v1/admin/shadow-ai/detections', params,
+  );
+  return toPaginated<ShadowAIDetection>(raw, params?.page);
 }
 
 export async function allowlistShadowAI(id: string): Promise<ShadowAIDetection> {
-  return apiClient.post<ShadowAIDetection>(`/v2/admin/shadow-ai/${id}/allowlist`);
+  // Backend marks a detection as reviewed/allowlisted via /detections/{id}/review.
+  return apiClient.post<ShadowAIDetection>(`/v1/admin/shadow-ai/detections/${id}/review`, {
+    decision: 'allowlist',
+  });
 }
 
 // ============================================================
@@ -141,7 +285,10 @@ export async function listScribeAudits(params?: {
   status?: string;
   page?: number;
 }): Promise<PaginatedResponse<ScribeAudit>> {
-  return apiClient.get<PaginatedResponse<ScribeAudit>>('/v2/admin/scribe-audits', params);
+  const raw = await apiClient.get<ScribeAudit[] | PaginatedResponse<ScribeAudit>>(
+    '/v1/admin/scribe-audits', params,
+  );
+  return toPaginated<ScribeAudit>(raw, params?.page);
 }
 
 // ============================================================
@@ -151,13 +298,16 @@ export async function listScribeAudits(params?: {
 export async function listTransparencyRecords(params?: {
   page?: number;
 }): Promise<PaginatedResponse<TransparencyRecord>> {
-  return apiClient.get<PaginatedResponse<TransparencyRecord>>('/v2/transparency', params);
+  const raw = await apiClient.get<TransparencyRecord[] | PaginatedResponse<TransparencyRecord>>(
+    '/v1/transparency', params,
+  );
+  return toPaginated<TransparencyRecord>(raw, params?.page);
 }
 
 export async function createTransparencyRecord(
   data: Omit<TransparencyRecord, 'id' | 'created_at' | 'version'>
 ): Promise<TransparencyRecord> {
-  return apiClient.post<TransparencyRecord>('/v2/transparency', data);
+  return apiClient.post<TransparencyRecord>('/v1/transparency', data);
 }
 
 // ============================================================
@@ -168,11 +318,16 @@ export async function listPriorAuthRecords(params?: {
   page?: number;
   page_size?: number;
 }): Promise<PaginatedResponse<PriorAuthRecord>> {
-  return apiClient.get<PaginatedResponse<PriorAuthRecord>>('/v2/finance/prior-auth', params);
+  const raw = await apiClient.get<PriorAuthRecord[] | PaginatedResponse<PriorAuthRecord>>(
+    '/v1/finance/prior-auth', params,
+  );
+  return toPaginated<PriorAuthRecord>(raw, params?.page, params?.page_size);
 }
 
 export async function verifyPriorAuthChain(id: string): Promise<{ valid: boolean; message: string }> {
-  return apiClient.post<{ valid: boolean; message: string }>(`/v2/finance/prior-auth/${id}/verify`);
+  return apiClient.post<{ valid: boolean; message: string }>('/v1/finance/prior-auth/verify-chain', {
+    record_id: id,
+  });
 }
 
 // ============================================================
@@ -182,7 +337,10 @@ export async function verifyPriorAuthChain(id: string): Promise<{ valid: boolean
 export async function listRevenueCycleAudits(params?: {
   page?: number;
 }): Promise<PaginatedResponse<RevenueCycleAudit>> {
-  return apiClient.get<PaginatedResponse<RevenueCycleAudit>>('/v2/finance/revenue-cycle', params);
+  const raw = await apiClient.get<RevenueCycleAudit[] | PaginatedResponse<RevenueCycleAudit>>(
+    '/v1/finance/revenue-cycle', params,
+  );
+  return toPaginated<RevenueCycleAudit>(raw, params?.page);
 }
 
 // ============================================================
@@ -193,7 +351,10 @@ export async function listTechnicalFiles(params?: {
   lifecycle_stage?: string;
   page?: number;
 }): Promise<PaginatedResponse<TechnicalFile>> {
-  return apiClient.get<PaginatedResponse<TechnicalFile>>('/v2/regulatory/technical-files', params);
+  const raw = await apiClient.get<TechnicalFile[] | PaginatedResponse<TechnicalFile>>(
+    '/v1/regulatory/technical-files', params,
+  );
+  return toPaginated<TechnicalFile>(raw, params?.page);
 }
 
 // ============================================================
@@ -205,7 +366,10 @@ export async function listAdverseEvents(params?: {
   status?: string;
   page?: number;
 }): Promise<PaginatedResponse<AdverseEvent>> {
-  return apiClient.get<PaginatedResponse<AdverseEvent>>('/v2/regulatory/adverse-events', params);
+  const raw = await apiClient.get<AdverseEvent[] | PaginatedResponse<AdverseEvent>>(
+    '/v1/regulatory/adverse-events', params,
+  );
+  return toPaginated<AdverseEvent>(raw, params?.page);
 }
 
 // ============================================================
@@ -215,11 +379,29 @@ export async function listAdverseEvents(params?: {
 export async function listPMSReports(params?: {
   page?: number;
 }): Promise<PaginatedResponse<PMSReport>> {
-  return apiClient.get<PaginatedResponse<PMSReport>>('/v2/regulatory/pms-reports', params);
+  const raw = await apiClient.get<PMSReport[] | PaginatedResponse<PMSReport>>(
+    '/v1/regulatory/pms-reports', params,
+  );
+  return toPaginated<PMSReport>(raw, params?.page);
 }
 
+/**
+ * Generate a PSUR draft for the previous calendar year via the canonical
+ * `POST /v1/regulatory/pms-reports` endpoint with `auto_generate_summary=true`.
+ * (There is no dedicated /generate-psur route — this is a convenience wrapper.)
+ */
 export async function generatePSUR(): Promise<PMSReport> {
-  return apiClient.post<PMSReport>('/v2/regulatory/pms-reports/generate-psur');
+  const now = new Date();
+  const year = now.getFullYear();
+  // Last completed full year
+  const start = `${year - 1}-01-01`;
+  const end = `${year}-01-01`;
+  return apiClient.post<PMSReport>('/v1/regulatory/pms-reports', {
+    report_type: 'psur',
+    period_start: start,
+    period_end: end,
+    auto_generate_summary: true,
+  });
 }
 
 // ============================================================
@@ -227,25 +409,25 @@ export async function generatePSUR(): Promise<PMSReport> {
 // ============================================================
 
 export async function getRiskPortfolio(): Promise<RiskPortfolio> {
-  return apiClient.get<RiskPortfolio>('/v2/risk/portfolio');
+  return apiClient.get<RiskPortfolio>('/v1/risk/portfolio');
 }
 
 export async function getRiskScore(modelId: string): Promise<RiskScore> {
-  return apiClient.get<RiskScore>(`/v2/risk/score/${modelId}`);
+  return apiClient.get<RiskScore>(`/v1/risk/scores/${modelId}/latest`);
 }
 
 export async function getRiskHistory(modelId: string): Promise<RiskHistoryEntry[]> {
-  return apiClient.get<RiskHistoryEntry[]>(`/v2/risk/history/${modelId}`);
+  return apiClient.get<RiskHistoryEntry[]>(`/v1/risk/history/${modelId}`);
 }
 
 export async function getRiskConfiguration(): Promise<RiskConfiguration> {
-  return apiClient.get<RiskConfiguration>('/v2/risk/configuration');
+  return apiClient.get<RiskConfiguration>('/v1/risk/configuration');
 }
 
 export async function updateRiskConfiguration(
   data: Partial<RiskConfiguration>
 ): Promise<RiskConfiguration> {
-  return apiClient.put<RiskConfiguration>('/v2/risk/configuration', data);
+  return apiClient.put<RiskConfiguration>('/v1/risk/configuration', data);
 }
 
 // ============================================================
@@ -261,12 +443,12 @@ export async function getOrganization(): Promise<{
   hipaa_baa_date?: string;
   is_active: boolean;
 }> {
-  return apiClient.get('/v2/organizations/current');
+  return apiClient.get('/v1/organizations');
 }
 
 export async function updateOrganization(data: {
   name?: string;
   org_type?: string;
 }): Promise<unknown> {
-  return apiClient.put('/v2/organizations/current', data);
+  return apiClient.put('/v1/organizations/current', data);
 }
