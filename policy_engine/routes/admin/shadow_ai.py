@@ -1,16 +1,23 @@
 """Shadow AI Discovery routes — /v1/admin/shadow-ai/*"""
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import Any, List, Optional
 from datetime import datetime, timedelta
 import uuid
 
 from policy_engine.database import get_db
+from policy_engine.auth.api_key import get_current_agent
 from policy_engine.auth.rbac import get_current_user
 from policy_engine.models.user import User, has_permission
 from policy_engine.models.shadow_ai import ShadowAIDetectionModel, ShadowAIAllowlist
 from policy_engine.domain.admin.shadow_ai import detect_ai_provider, assess_phi_risk
-from pydantic import BaseModel
+from policy_engine.services.shadow_ai_ingest import (
+    FlowRecord,
+    VENDOR_PARSERS,
+    ingest_flow_records,
+    ingest_vendor_payload,
+)
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/shadow-ai", tags=["admin-shadow-ai"])
 
@@ -69,6 +76,29 @@ class AllowlistResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class IngestFlowRecord(BaseModel):
+    """One canonical flow record. Use this when posting from a custom collector."""
+    destination_host: str = Field(..., min_length=1, max_length=255)
+    destination_port: int = Field(443, ge=1, le=65535)
+    source_ip: Optional[str] = Field(None, max_length=64)
+    bytes_transferred: int = Field(0, ge=0)
+    method: Optional[str] = Field(None, max_length=10)
+    user_agent: Optional[str] = Field(None, max_length=512)
+    department: Optional[str] = Field(None, max_length=128)
+    timestamp: Optional[datetime] = None
+
+
+class IngestRequest(BaseModel):
+    """Canonical batch ingest payload — vendor-agnostic flow records."""
+    records: List[IngestFlowRecord] = Field(..., min_length=1, max_length=5000)
+
+
+class VendorIngestRequest(BaseModel):
+    """Pass-through ingest for vendor-specific payloads (Cloudflare, Zscaler, ...)."""
+    vendor: str = Field(..., description="One of: cloudflare, zscaler, netskope, aws_vpc")
+    payload: Any = Field(..., description="Raw vendor payload (list/dict/string)")
 
 
 # ---------------------------------------------------------------------------
@@ -247,6 +277,76 @@ def delete_allowlist_entry(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Allowlist entry not found")
     db.delete(entry)
     db.commit()
+
+
+@router.post("/ingest", status_code=status.HTTP_202_ACCEPTED)
+def ingest_canonical_records(
+    payload: IngestRequest,
+    db: Session = Depends(get_db),
+    agent_id: str = Depends(get_current_agent),
+):
+    """Tier 3 — accept a batch of canonical flow records from any collector.
+
+    Authenticated via SDK API key. Use vendor-specific endpoints below for
+    raw Cloudflare / Zscaler / VPC payloads instead of normalising client-side.
+    """
+    records = [
+        FlowRecord(
+            destination_host=r.destination_host,
+            destination_port=r.destination_port,
+            source_ip=r.source_ip,
+            bytes_transferred=r.bytes_transferred,
+            method=r.method,
+            user_agent=r.user_agent,
+            department=r.department,
+            timestamp=r.timestamp,
+        )
+        for r in payload.records
+    ]
+    outcome = ingest_flow_records(db, records, organization_id=None)
+    return {
+        "received": outcome.received,
+        "classified_as_ai": outcome.classified_as_ai,
+        "detections_created": outcome.detections_created,
+        "detections_deduped": outcome.detections_deduped,
+        "allowlisted": outcome.allowlisted,
+        "errors": outcome.errors,
+        "agent_id": agent_id,
+    }
+
+
+@router.post("/ingest/vendor", status_code=status.HTTP_202_ACCEPTED)
+def ingest_vendor_records(
+    payload: VendorIngestRequest,
+    db: Session = Depends(get_db),
+    agent_id: str = Depends(get_current_agent),
+):
+    """Tier 3 — accept raw payloads from supported vendors and parse server-side.
+
+    Supported vendors: cloudflare (Logpush JSON-lines), zscaler / netskope
+    (SIEM flat JSON), aws_vpc (VPC Flow Logs v2 lines).
+    """
+    if payload.vendor.lower() not in VENDOR_PARSERS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "unsupported_vendor",
+                "supported": sorted(VENDOR_PARSERS.keys()),
+            },
+        )
+    outcome = ingest_vendor_payload(
+        db, vendor=payload.vendor, payload=payload.payload, organization_id=None,
+    )
+    return {
+        "vendor": payload.vendor,
+        "received": outcome.received,
+        "classified_as_ai": outcome.classified_as_ai,
+        "detections_created": outcome.detections_created,
+        "detections_deduped": outcome.detections_deduped,
+        "allowlisted": outcome.allowlisted,
+        "errors": outcome.errors,
+        "agent_id": agent_id,
+    }
 
 
 @router.get("/summary")
