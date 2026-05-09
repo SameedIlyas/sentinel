@@ -83,7 +83,8 @@ target-version = "py39"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-asyncio_mode = "auto"
+# Keep STRICT — tests were authored against pytest-asyncio strict mode.
+asyncio_mode = "strict"
 filterwarnings = [
     "ignore::DeprecationWarning:pydantic.*",
     "ignore::DeprecationWarning:passlib.*",
