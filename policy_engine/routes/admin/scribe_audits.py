@@ -2,16 +2,23 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from datetime import datetime
 import uuid
 
 from policy_engine.database import get_db
+from policy_engine.auth.api_key import get_current_agent
 from policy_engine.auth.rbac import get_current_user
 from policy_engine.models.user import User, has_permission
 from policy_engine.models.scribe_audit import ScribeAuditModel, ScribeAuditFinding as ScribeAuditFindingModel
 from policy_engine.domain.admin.scribe_auditor import ScribeAuditEngine, content_hash
-from pydantic import BaseModel
+from policy_engine.services.scribe_ingest import (
+    VENDOR_ADAPTERS,
+    ScribeIngestRecord,
+    ingest_scribe_record,
+    ingest_vendor_payload,
+)
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/scribe-audits", tags=["admin-scribe-audits"])
 
@@ -60,6 +67,24 @@ class ScribeAuditResponse(BaseModel):
 
 class ScribeAuditDetailResponse(ScribeAuditResponse):
     findings: List[FindingResponse] = []
+
+
+class ScribeIngestPayload(BaseModel):
+    """Tier 3 — canonical scribe ingest body. Use when posting raw transcript+
+    note pairs from a custom collector or design-partner pilot."""
+    session_id: str = Field(..., min_length=1, max_length=128)
+    transcript: str = Field(..., min_length=1, max_length=200_000)
+    generated_note: str = Field(..., min_length=1, max_length=200_000)
+    ai_model_used: Optional[str] = Field(None, max_length=128)
+    clinician_id: Optional[str] = Field(None, max_length=128)
+    encounter_id: Optional[str] = Field(None, max_length=128)
+
+
+class ScribeVendorIngestPayload(BaseModel):
+    """Tier 3 — vendor webhook pass-through. Translates vendor payloads
+    server-side via the right adapter."""
+    vendor: str = Field(..., description="One of: mock, abridge, nabla, deepscribe")
+    payload: Dict[str, Any]
 
 
 # ---------------------------------------------------------------------------
@@ -162,6 +187,83 @@ def create_scribe_audit(
             }
             for f in findings
         ],
+    }
+
+
+@router.post("/ingest", status_code=status.HTTP_202_ACCEPTED)
+def ingest_canonical_payload(
+    payload: ScribeIngestPayload,
+    db: Session = Depends(get_db),
+    agent_id: str = Depends(get_current_agent),
+):
+    """Tier 3 — vendor-agnostic scribe-audit ingest endpoint.
+
+    Used by design-partner pilots that hand-feed a `(transcript, generated_note)`
+    JSON payload, and by the per-vendor adapters' fallback path. The
+    server runs `audit_note()` (LLM-backed when ANTHROPIC_API_KEY is
+    present, deterministic otherwise) and persists the audit + findings.
+    """
+    record = ScribeIngestRecord(
+        session_id=payload.session_id,
+        transcript=payload.transcript,
+        generated_note=payload.generated_note,
+        ai_model_used=payload.ai_model_used,
+        clinician_id=payload.clinician_id,
+        vendor="mock",
+        encounter_id=payload.encounter_id,
+    )
+    outcome = ingest_scribe_record(db, record)
+    return {
+        "audit_id": outcome.audit_id,
+        "audit_score": outcome.audit_score,
+        "hallucination_detected": outcome.hallucination_detected,
+        "findings_count": outcome.findings_count,
+        "deduplicated": outcome.deduplicated,
+        "method": outcome.method,
+        "elapsed_ms": outcome.elapsed_ms,
+        "agent_id": agent_id,
+    }
+
+
+@router.post("/ingest/vendor", status_code=status.HTTP_202_ACCEPTED)
+def ingest_vendor_endpoint(
+    payload: ScribeVendorIngestPayload,
+    db: Session = Depends(get_db),
+    agent_id: str = Depends(get_current_agent),
+):
+    """Tier 3 — accept raw scribe-vendor webhook payloads.
+
+    Supported vendors: mock, abridge, nabla, deepscribe. The vendor adapter
+    translates the payload to the canonical shape; everything downstream is
+    one code path.
+    """
+    if payload.vendor.lower() not in VENDOR_ADAPTERS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "unsupported_vendor",
+                "supported": sorted(VENDOR_ADAPTERS.keys()),
+            },
+        )
+    try:
+        outcome = ingest_vendor_payload(
+            db, vendor=payload.vendor, payload=payload.payload,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"error": "invalid_payload", "message": str(exc)},
+        ) from exc
+    return {
+        "vendor": payload.vendor,
+        "audit_id": outcome.audit_id,
+        "audit_score": outcome.audit_score,
+        "hallucination_detected": outcome.hallucination_detected,
+        "findings_count": outcome.findings_count,
+        "deduplicated": outcome.deduplicated,
+        "method": outcome.method,
+        "elapsed_ms": outcome.elapsed_ms,
+        "agent_id": agent_id,
     }
 
 
