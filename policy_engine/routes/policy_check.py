@@ -15,6 +15,7 @@ from policy_engine.models.alert_config import AlertConfig
 from policy_engine.services.alert_service import AlertService
 from policy_engine.services.slack_service import slack_service
 from policy_engine.services.agent_activity_service import AgentActivityService
+from policy_engine.services.hitl_auto_service import trigger_hitl_from_policy
 from policy_engine.infrastructure.security.phi_redaction import PHIRedactionEngine
 
 router = APIRouter()
@@ -267,16 +268,20 @@ async def check_policy(
         
         # Create audit log entry
         audit_log_id = create_audit_log(db, request, response)
-        
+
         # Trigger alerts for policy violations
         trigger_alert(db, request, response, audit_log_id, is_new_agent=is_new_agent)
+
+        # Auto-create HITL review for require_approval decisions (Tier 2 Sprint 1)
+        if response.decision == "require_approval":
+            trigger_hitl_from_policy(db, request, response, audit_log_id=audit_log_id)
 
         # Log the decision
         logger.info(
             f"Policy decision for agent={request.agent_id}, tool={request.tool_name}: "
             f"{response.decision} - {response.reason}"
         )
-        
+
         return response
         
     except HTTPException:
@@ -366,9 +371,13 @@ async def check_policies_batch(
             
             # Create audit log entry
             audit_log_id = create_audit_log(db, request, response)
-            
+
             # Trigger alerts for policy violations
             trigger_alert(db, request, response, audit_log_id, is_new_agent=is_new_agent)
+
+            # Auto-create HITL review for require_approval decisions (Tier 2 Sprint 1)
+            if response.decision == "require_approval":
+                trigger_hitl_from_policy(db, request, response, audit_log_id=audit_log_id)
 
         except Exception as e:
             logger.error(f"Batch evaluation error for tool={request.tool_name}: {str(e)}")
