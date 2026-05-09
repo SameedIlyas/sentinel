@@ -27,6 +27,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import ArticleIcon from '@mui/icons-material/Article';
 import { listModelCards } from '@/api/healthcare';
 import { ModelCard, ModelCardLifecycle } from '@/types';
+import EmptyState from '@/components/common/EmptyState';
 
 const LIFECYCLE_STAGES: Array<{ value: ModelCardLifecycle | 'all'; label: string }> = [
   { value: 'all', label: 'All' },
@@ -88,9 +89,16 @@ const ModelCardList: React.FC = () => {
       }),
   });
 
-  const filteredItems: ModelCard[] = (data?.items ?? []).filter((card) =>
-    card.model_name.toLowerCase().includes(search.toLowerCase())
-  );
+  // Backend returns `name`; the TS type calls it `model_name`. Tolerate either
+  // and normalise so the rest of the page can rely on `card.model_name`.
+  const filteredItems: ModelCard[] = (data?.items ?? [])
+    .map((card) => ({
+      ...card,
+      model_name: card.model_name ?? (card as unknown as { name?: string }).name ?? '',
+    }))
+    .filter((card) =>
+      (card.model_name || '').toLowerCase().includes(search.toLowerCase()),
+    );
 
   const handleRowClick = (id: string) => {
     navigate(`/clinical/model-cards/${id}`);
@@ -178,12 +186,18 @@ const ModelCardList: React.FC = () => {
               <SkeletonRows count={5} />
             ) : filteredItems.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7}>
-                  <Box sx={{ py: 6, textAlign: 'center' }}>
-                    <Typography variant="body2" color="text.secondary">
-                      No model cards found.
-                    </Typography>
-                  </Box>
+                <TableCell colSpan={7} sx={{ p: 0, border: 0 }}>
+                  <EmptyState
+                    title={search ? 'No model cards match your search' : 'No model cards yet'}
+                    description="Model cards are CHAI-compliant documentation for every clinical AI model your organization has deployed — intended use, indications, contraindications, performance, and bias summary."
+                    ingestHint="Create cards manually, or auto-fill from a GitHub repo + MLflow run via the auto-fill endpoint. A future MLflow sync job will create draft cards automatically when models are registered."
+                    icon={<ArticleIcon />}
+                    primaryAction={{
+                      label: 'New Model Card',
+                      onClick: () => navigate('/clinical/model-cards/new'),
+                      startIcon: <AddIcon />,
+                    }}
+                  />
                 </TableCell>
               </TableRow>
             ) : (

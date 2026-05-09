@@ -9,6 +9,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { listHITLReviews } from '@/api/healthcare';
 import type { HITLStatus } from '@/types';
+import EmptyState from '@/components/common/EmptyState';
 
 const STATUS_FILTERS = ['All', 'pending', 'approved', 'rejected', 'modified'] as const;
 type FilterValue = typeof STATUS_FILTERS[number];
@@ -86,24 +87,50 @@ const HITLQueue: React.FC = () => {
               : !data?.items?.length
               ? (
                   <TableRow>
-                    <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
-                      <Typography color="text.secondary">No reviews in queue</Typography>
+                    <TableCell colSpan={8} sx={{ p: 0, border: 0 }}>
+                      <EmptyState
+                        title={filter !== 'All' ? `No ${filter} reviews` : 'No reviews waiting for human approval'}
+                        description="Human-in-the-loop reviews queue here when a policy decision needs a human's sign-off — for example, transactions over $1k or AI recommendations against guidelines."
+                        ingestHint="Reviews are auto-created by the policy engine when a check returns 'requires approval' (action: require_approval). When you wire a policy with that action, decisions land here automatically."
+                        icon={<HowToRegIcon />}
+                      />
                     </TableCell>
                   </TableRow>
                 )
               : data.items.map((row) => {
                   const isOverdue = row.sla_deadline ? new Date(row.sla_deadline) < new Date() : false;
+                  // ai_decision can come back as a string OR an object like
+                  // { recommendation, confidence, reason, ... } — render either form.
+                  const decision: unknown = (row as unknown as { ai_decision?: unknown }).ai_decision;
+                  const decisionText: string =
+                    typeof decision === 'string'
+                      ? decision
+                      : decision && typeof decision === 'object'
+                        ? String(
+                            (decision as { recommendation?: unknown; reason?: unknown }).recommendation
+                              ?? (decision as { reason?: unknown }).reason
+                              ?? JSON.stringify(decision),
+                          )
+                        : '—';
+                  const decisionConfidence: number | undefined =
+                    decision && typeof decision === 'object'
+                      ? (decision as { confidence?: number }).confidence
+                      : undefined;
                   return (
                     <TableRow key={row.id} hover>
                       <TableCell>{new Date(row.created_at).toLocaleDateString()}</TableCell>
-                      <TableCell>{row.model_id}</TableCell>
+                      <TableCell>{(row as { title?: string }).title ?? row.model_id ?? '—'}</TableCell>
                       <TableCell>
-                        {row.ai_decision.length > 60
-                          ? `${row.ai_decision.slice(0, 60)}…`
-                          : row.ai_decision}
+                        {decisionText.length > 60
+                          ? `${decisionText.slice(0, 60)}…`
+                          : decisionText}
                       </TableCell>
                       <TableCell>
-                        {row.ai_confidence != null ? `${(row.ai_confidence * 100).toFixed(0)}%` : '—'}
+                        {decisionConfidence != null
+                          ? `${(decisionConfidence * 100).toFixed(0)}%`
+                          : row.ai_confidence != null
+                            ? `${(row.ai_confidence * 100).toFixed(0)}%`
+                            : '—'}
                       </TableCell>
                       <TableCell>{row.risk_score ?? '—'}</TableCell>
                       <TableCell sx={{ color: isOverdue ? 'error.main' : 'inherit' }}>
@@ -132,7 +159,7 @@ const HITLQueue: React.FC = () => {
         </Table>
       </TableContainer>
 
-      {data && (
+      {data && typeof data.total === 'number' && (
         <TablePagination
           component="div"
           count={data.total}

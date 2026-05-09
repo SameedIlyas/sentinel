@@ -82,9 +82,14 @@ const BiasAuditDetail: React.FC = () => {
             <Box>
               <Typography variant="caption" color="text.secondary">Subgroups</Typography>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
-                {audit.subgroups.map((sg) => (
-                  <Chip key={sg} label={sg} size="small" variant="outlined" />
-                ))}
+                {Array.isArray(audit.subgroups) && audit.subgroups.length > 0
+                  ? audit.subgroups.map((sg) => (
+                      <Chip key={typeof sg === 'string' ? sg : JSON.stringify(sg)}
+                            label={typeof sg === 'string' ? sg : (sg as { name?: string })?.name ?? '—'}
+                            size="small"
+                            variant="outlined" />
+                    ))
+                  : <Typography variant="body2" color="text.secondary">No subgroups recorded</Typography>}
               </Box>
             </Box>
           </>
