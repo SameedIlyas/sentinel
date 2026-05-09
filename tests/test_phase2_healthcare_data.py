@@ -7,7 +7,7 @@ Tests for: FHIR R4 Client, DICOM Extractor, PHI Redaction Engine, Data Classifie
 
 import pytest
 import os
-from unittest.mock import Mock, patch, MagicMock, AsyncMock
+from unittest.mock import patch, MagicMock, AsyncMock
 
 
 # ---------------------------------------------------------------------------
@@ -145,9 +145,7 @@ class TestDICOMExtractor:
         from policy_engine.infrastructure.external.dicom_client import DICOMParseError  # noqa: F401
 
     def test_extract_metadata_strips_patient_name(self):
-        import pydicom
-        from pydicom.dataset import Dataset, FileMetaDataset
-        from pydicom.uid import UID
+        from pydicom.dataset import Dataset
         from policy_engine.infrastructure.external.dicom_client import DICOMExtractor
 
         ds = Dataset()
@@ -174,7 +172,7 @@ class TestDICOMExtractor:
         assert "PatientID" not in result
 
     def test_extract_metadata_strips_all_18_phi_tags(self):
-        from policy_engine.infrastructure.external.dicom_client import DICOMExtractor, PHI_DICOM_TAGS
+        from policy_engine.infrastructure.external.dicom_client import PHI_DICOM_TAGS
         assert len(PHI_DICOM_TAGS) == 18, f"Expected 18 PHI tags, got {len(PHI_DICOM_TAGS)}"
         # Verify all 18 are present
         required_tags = {
@@ -187,7 +185,6 @@ class TestDICOMExtractor:
         assert PHI_DICOM_TAGS == required_tags
 
     def test_pixel_data_access_raises_error(self):
-        import pydicom
         from pydicom.dataset import Dataset
         from policy_engine.infrastructure.external.dicom_client import DICOMExtractor, DICOMPixelDataError
 
@@ -210,7 +207,6 @@ class TestDICOMExtractor:
             extractor.extract_metadata(b"this is not a dicom file at all")
 
     def test_safe_tags_retained(self):
-        import pydicom
         from pydicom.dataset import Dataset
         from policy_engine.infrastructure.external.dicom_client import DICOMExtractor
 
@@ -390,7 +386,7 @@ class TestPHIRedactionEngine:
         assert result.processing_time_ms < 100, f"Too slow: {result.processing_time_ms}ms"
 
     def test_redaction_result_has_all_fields(self):
-        from policy_engine.infrastructure.security.phi_redaction import PHIRedactionEngine, PHIRedactionResult
+        from policy_engine.infrastructure.security.phi_redaction import PHIRedactionEngine
         engine = PHIRedactionEngine()
         result = engine.redact("test SSN: 123-45-6789")
         assert hasattr(result, "original_text")

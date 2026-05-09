@@ -4,10 +4,8 @@ Phase 1 Architecture Tests
 TDD tests for all 6 Phase 1 tasks written BEFORE implementation.
 """
 
-import pytest
 import os
-from unittest.mock import Mock, patch, MagicMock, AsyncMock
-from typing import AsyncGenerator
+from unittest.mock import patch, MagicMock
 
 
 # ---------------------------------------------------------------------------
@@ -39,7 +37,6 @@ class TestAsyncDatabase:
         """When DATABASE_URL starts with sqlite://, async engine uses sqlite+aiosqlite://."""
         with patch.dict(os.environ, {"DATABASE_URL": "sqlite:///./test.db"}):
             # Re-import config to pick up env change
-            import importlib
             import policy_engine.database as db_module
             # The async_engine URL should use aiosqlite driver
             url_str = str(db_module.async_engine.url)
@@ -281,7 +278,7 @@ class TestExpandedRoles:
 
     def test_system_admin_has_full_access(self):
         """SYSTEM_ADMIN must have full access to all resources."""
-        from policy_engine.models.user import UserRole, ROLE_PERMISSIONS, has_permission
+        from policy_engine.models.user import UserRole, ROLE_PERMISSIONS
         admin_perms = ROLE_PERMISSIONS.get(UserRole.SYSTEM_ADMIN, {})
         assert len(admin_perms) > 0, "SYSTEM_ADMIN has no permissions defined"
 

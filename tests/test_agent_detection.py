@@ -4,7 +4,6 @@ RED phase: register_or_update_agent currently returns Agent (not a tuple),
 and trigger_alert has is_new_agent hardcoded to False.  All tuple-return
 assertions and new-agent severity assertions will FAIL until GREEN.
 """
-import pytest
 from unittest.mock import MagicMock, patch
 
 from policy_engine.models.agent import Agent, AgentStatus
@@ -147,7 +146,7 @@ def test_new_agent_alert_uses_critical_severity(db_session):
 
 def test_update_last_active_updates_timestamp(db_session):
     """update_last_active() must update last_active on an existing agent."""
-    from datetime import datetime, timedelta
+    from datetime import datetime
 
     # Seed an agent with an old last_active
     agent = Agent(
@@ -185,8 +184,6 @@ def test_get_agent_metrics_returns_none_for_unknown_agent(db_session):
 
 def test_get_agent_metrics_returns_dict_for_existing_agent(db_session):
     """get_agent_metrics() returns a metrics dict for a known agent."""
-    from policy_engine.models.audit_log import AuditLog
-    from datetime import datetime, timezone
 
     agent = Agent(
         id="agent-metrics-001",

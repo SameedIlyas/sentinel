@@ -6,7 +6,6 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from policy_engine.models.alert import Alert, AlertSeverity
 from policy_engine.models.schemas import PolicyType

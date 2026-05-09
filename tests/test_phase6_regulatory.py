@@ -2,7 +2,7 @@
 import os
 import uuid
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///./test_phase6.db")
 os.environ.setdefault("SECRET_KEY", "test-secret-phase6-xyz-abc")

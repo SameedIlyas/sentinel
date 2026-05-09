@@ -5,7 +5,6 @@ and config.py has no ARCHIVE_* fields.  All tests will FAIL until GREEN.
 """
 import gzip
 import json
-import os
 from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -101,7 +100,6 @@ def test_local_archive_strips_phi_fields(tmp_path: Path, db_session):
 def test_archive_and_delete_does_not_delete_if_archive_fails(db_session):
     """If archive raises, delete must NOT be called (data safety guarantee)."""
     from policy_engine.services.audit_retention import AuditLogRetentionService
-    from policy_engine.services.archive_backends import get_archive_backend
 
     log = _make_audit_log("log-safety-001", days_old=400)
     db_session.add(log)

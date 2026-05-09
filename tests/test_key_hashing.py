@@ -4,7 +4,7 @@ TDD RED phase: all tests written before implementation.
 """
 import hashlib
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 
 # ---------------------------------------------------------------------------
@@ -63,7 +63,6 @@ class TestVerifyArgon2Hash:
 class TestTimingSafeComparison:
     def test_sha256_comparison_uses_hmac_compare_digest(self):
         """_verify_sha256 must use hmac.compare_digest, not ==, for timing-safe comparison."""
-        from unittest.mock import patch
         import hmac
         from policy_engine.auth.key_hashing import verify_api_key_hash
 
@@ -134,7 +133,6 @@ class TestTransparentUpgrade:
     def test_sha256_key_transparently_upgrades_in_db(self, db_session):
         """A SHA-256 stored key is silently re-hashed to Argon2id on next auth."""
         from policy_engine.models.api_key import APIKey
-        from policy_engine.auth.api_key import verify_api_key as _verify_api_key
 
         raw_key = "upgrade-me-key-abc123"
         sha256_hash = hashlib.sha256(raw_key.encode()).hexdigest()

@@ -4,7 +4,6 @@ Write tests FIRST (RED), then implement to make them GREEN.
 """
 from __future__ import annotations
 
-import pytest
 from unittest.mock import MagicMock
 
 

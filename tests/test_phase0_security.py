@@ -6,11 +6,8 @@ Written FIRST (TDD RED phase) before implementation.
 """
 
 import pytest
-import uuid
-import time
-from unittest.mock import Mock, patch, MagicMock, AsyncMock
-from datetime import datetime, timedelta
-from typing import Optional
+from unittest.mock import Mock, patch, MagicMock
+from datetime import timedelta
 
 
 # ---------------------------------------------------------------------------
@@ -23,7 +20,7 @@ class TestJWTSecretKey:
     def test_create_access_token_uses_settings_secret_key(self):
         """Token creation must use settings.SECRET_KEY, not a hardcoded string."""
         from policy_engine.config import settings
-        from policy_engine.auth.jwt_utils import create_access_token, decode_access_token
+        from policy_engine.auth.jwt_utils import create_access_token
         import jwt as pyjwt
 
         token = create_access_token({"user_id": "u1", "username": "alice", "role": "admin"})
@@ -784,7 +781,6 @@ class TestRBACUnit:
         """get_current_user raises 401 when credentials is None."""
         from fastapi import HTTPException
         from policy_engine.auth.rbac import get_current_user
-        from unittest.mock import MagicMock
 
         db = MagicMock()
         with pytest.raises(HTTPException) as exc_info:
@@ -796,7 +792,6 @@ class TestRBACUnit:
         from fastapi import HTTPException
         from fastapi.security import HTTPAuthorizationCredentials
         from policy_engine.auth.rbac import get_current_user
-        from unittest.mock import MagicMock, patch
 
         creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials="bad.token.here")
         db = MagicMock()
@@ -810,7 +805,6 @@ class TestRBACUnit:
         from fastapi import HTTPException
         from fastapi.security import HTTPAuthorizationCredentials
         from policy_engine.auth.rbac import get_current_user
-        from unittest.mock import MagicMock, patch
 
         creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials="some.token")
         db = MagicMock()
@@ -826,7 +820,6 @@ class TestRBACUnit:
         from fastapi import HTTPException
         from fastapi.security import HTTPAuthorizationCredentials
         from policy_engine.auth.rbac import get_current_user
-        from unittest.mock import MagicMock, patch
 
         creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials="some.token")
         db = MagicMock()
@@ -845,7 +838,6 @@ class TestRBACUnit:
         from fastapi import HTTPException
         from fastapi.security import HTTPAuthorizationCredentials
         from policy_engine.auth.rbac import get_current_user
-        from unittest.mock import MagicMock, patch
 
         creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials="some.token")
         db = MagicMock()
@@ -865,7 +857,6 @@ class TestRBACUnit:
         """get_current_user returns user object when token and user are valid."""
         from fastapi.security import HTTPAuthorizationCredentials
         from policy_engine.auth.rbac import get_current_user
-        from unittest.mock import MagicMock, patch
 
         creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials="some.token")
         db = MagicMock()
@@ -885,7 +876,6 @@ class TestRBACUnit:
         from fastapi import HTTPException
         from fastapi.security import HTTPAuthorizationCredentials
         from policy_engine.auth.rbac import get_current_user
-        from unittest.mock import MagicMock, patch
 
         creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials="some.token")
         db = MagicMock()
@@ -918,7 +908,6 @@ class TestRBACUnit:
         from fastapi import HTTPException
         from policy_engine.auth.rbac import get_admin_user
         from policy_engine.models.user import UserRole
-        from unittest.mock import MagicMock
 
         mock_user = MagicMock()
         mock_user.role = UserRole.ANALYST
@@ -930,7 +919,6 @@ class TestRBACUnit:
         """get_admin_user returns user when role is ADMIN."""
         from policy_engine.auth.rbac import get_admin_user
         from policy_engine.models.user import UserRole
-        from unittest.mock import MagicMock
 
         mock_user = MagicMock()
         mock_user.role = UserRole.ADMIN
@@ -942,7 +930,6 @@ class TestRBACUnit:
         from fastapi import HTTPException
         from policy_engine.auth.rbac import get_analyst_or_admin
         from policy_engine.models.user import UserRole
-        from unittest.mock import MagicMock
 
         mock_user = MagicMock()
         mock_user.role = UserRole.VIEWER
@@ -954,7 +941,6 @@ class TestRBACUnit:
         """get_analyst_or_admin allows ANALYST role."""
         from policy_engine.auth.rbac import get_analyst_or_admin
         from policy_engine.models.user import UserRole
-        from unittest.mock import MagicMock
 
         mock_user = MagicMock()
         mock_user.role = UserRole.ANALYST
@@ -966,7 +952,6 @@ class TestRBACUnit:
         from fastapi import HTTPException
         from policy_engine.auth.rbac import require_role
         from policy_engine.models.user import UserRole
-        from unittest.mock import MagicMock, patch
 
         checker = require_role([UserRole.ADMIN])
         mock_user = MagicMock()
@@ -980,7 +965,6 @@ class TestRBACUnit:
         """The callable returned by require_role allows the correct role."""
         from policy_engine.auth.rbac import require_role
         from policy_engine.models.user import UserRole
-        from unittest.mock import MagicMock
 
         checker = require_role([UserRole.ADMIN])
         mock_user = MagicMock()
@@ -992,8 +976,7 @@ class TestRBACUnit:
         """The callable returned by require_permission raises 403 when permission denied."""
         from fastapi import HTTPException
         from policy_engine.auth.rbac import require_permission
-        from policy_engine.models.user import UserRole, has_permission
-        from unittest.mock import MagicMock, patch
+        from policy_engine.models.user import UserRole
 
         checker = require_permission("policies", "delete")
         mock_user = MagicMock()
@@ -1007,7 +990,6 @@ class TestRBACUnit:
         """The callable returned by require_permission allows when permission granted."""
         from policy_engine.auth.rbac import require_permission
         from policy_engine.models.user import UserRole
-        from unittest.mock import MagicMock, patch
 
         checker = require_permission("policies", "read")
         mock_user = MagicMock()
@@ -1019,7 +1001,6 @@ class TestRBACUnit:
     def test_authenticate_request_returns_user_id_for_valid_jwt(self):
         """authenticate_request returns user.id when JWT bearer token is valid."""
         from policy_engine.auth.rbac import authenticate_request
-        from unittest.mock import MagicMock, patch
 
         mock_request = MagicMock()
         mock_request.headers.get.return_value = None  # no API key header
@@ -1039,7 +1020,6 @@ class TestRBACUnit:
         """authenticate_request raises 401 when no JWT or API key provided."""
         from fastapi import HTTPException
         from policy_engine.auth.rbac import authenticate_request
-        from unittest.mock import MagicMock
 
         mock_request = MagicMock()
         mock_request.headers.get.return_value = None

@@ -4,13 +4,12 @@ RED phase: these tests define the expected behaviour of the real readiness
 probe.  They will FAIL until health.py is updated to perform live DB and Redis
 checks.
 """
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from fastapi.testclient import TestClient
 
 from policy_engine.database import get_db
 from policy_engine.main import app
-from tests.conftest import TestingSessionLocal, _override_get_db
+from tests.conftest import _override_get_db
 
 
 # ---------------------------------------------------------------------------

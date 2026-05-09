@@ -4,10 +4,7 @@ Ensures that tool arguments containing PHI patterns (SSN, DOB, phone, email)
 are redacted before being persisted in the audit log.
 """
 
-import pytest
-import re
 from policy_engine.routes.policy_check import _redact_arguments
-from policy_engine.infrastructure.security.phi_redaction import PHIRedactionEngine
 
 
 # ---------------------------------------------------------------------------

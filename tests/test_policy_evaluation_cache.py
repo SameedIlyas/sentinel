@@ -1,12 +1,11 @@
 """Integration tests for policy evaluation with Redis cache"""
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from datetime import datetime
 
 from policy_engine.services.policy_evaluation import PolicyEvaluationService
 from policy_engine.models.schemas import PolicyCheckRequest, PolicyCheckResponse
-from policy_engine.models.policy import Policy, PolicyType
 
 
 class TestPolicyEvaluationCache:

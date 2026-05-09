@@ -5,7 +5,7 @@ Covers: models/user.py (ROLE_PERMISSIONS + has_permission function)
 """
 import pytest
 
-from policy_engine.models.user import UserRole, ROLE_PERMISSIONS, has_permission
+from policy_engine.models.user import UserRole, has_permission
 
 
 # ---------------------------------------------------------------------------

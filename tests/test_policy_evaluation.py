@@ -4,10 +4,8 @@ Covers: routes/policy_check.py, services/policy_evaluation.py,
         services/alert_service.py (basic wiring), models/audit_log.py
 """
 import uuid
-from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-import pytest
 
 from policy_engine.models.alert import Alert
 from policy_engine.models.audit_log import AuditLog
@@ -331,11 +329,9 @@ def test_access_control_evaluator_allows_unmatched_tool(authed_client, db_sessio
 # Task 2.2: PolicyEvaluationService cache methods
 # ---------------------------------------------------------------------------
 
-from datetime import timedelta
-from unittest.mock import MagicMock, patch, PropertyMock
 
 from policy_engine.services.policy_evaluation import PolicyEvaluationService
-from policy_engine.models.schemas import PolicyCheckRequest, PolicyCheckResponse
+from policy_engine.models.schemas import PolicyCheckResponse
 
 
 def _make_eval_service(db_session):

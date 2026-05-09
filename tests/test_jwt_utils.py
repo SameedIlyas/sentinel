@@ -1,6 +1,5 @@
 """Tests for JWT audience verification (Task 3.2)."""
 
-import pytest
 import jwt as pyjwt
 from datetime import datetime, timedelta
 

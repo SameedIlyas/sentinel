@@ -5,7 +5,6 @@ Write tests FIRST (RED), then implement to make them GREEN.
 from __future__ import annotations
 
 import io
-import struct
 import pytest
 
 
@@ -25,9 +24,8 @@ def _make_dicom_bytes(
 ) -> bytes:
     """Create minimal DICOM file bytes using pydicom FileDataset."""
     import pydicom
-    from pydicom.dataset import Dataset, FileDataset
+    from pydicom.dataset import FileDataset
     from pydicom.uid import ExplicitVRLittleEndian
-    from pydicom.sequence import Sequence
 
     file_meta = pydicom.dataset.FileMetaDataset()
     file_meta.MediaStorageSOPClassUID = pydicom.uid.UID("1.2.840.10008.5.1.4.1.1.2")
@@ -162,7 +160,6 @@ class TestDICOMFileSizeLimit:
     def test_dicom_file_at_exact_limit_accepted(self) -> None:
         """A valid DICOM file at (or below) the size limit must be accepted."""
         from policy_engine.services.dicom_service import DICOMDeidentificationService
-        from policy_engine.config import settings
         # Use a properly-formed tiny DICOM — size will be well under 50 MB
         dicom_bytes = _make_dicom_bytes()
         svc = DICOMDeidentificationService()

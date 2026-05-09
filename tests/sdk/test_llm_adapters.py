@@ -2,9 +2,7 @@
 
 Covers: sentinel/sdk/adapters/*.py, sentinel/sdk/llm_adapter.py
 """
-import pytest
 
-from sentinel.sdk.llm_adapter import LLMAdapter, LLMAdapterRegistry, ToolCall, LLMRequest
 from sentinel.sdk.adapters.openai_adapter import OpenAIAdapter
 from sentinel.sdk.adapters.anthropic_adapter import AnthropicAdapter
 from sentinel.sdk.adapters.azure_openai_adapter import AzureOpenAIAdapter

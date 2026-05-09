@@ -1,8 +1,7 @@
 """Tests for Redis cache service"""
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from datetime import datetime
+from unittest.mock import Mock, patch
 import json
 
 from policy_engine.services.redis_cache import RedisCacheService

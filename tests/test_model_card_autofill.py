@@ -4,11 +4,9 @@ All external HTTP calls are mocked with respx — no real GitHub/MLflow traffic.
 """
 from __future__ import annotations
 
-import ipaddress
-import json
 import socket
 from typing import Any, Dict
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 import respx
