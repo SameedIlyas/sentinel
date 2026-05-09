@@ -1,0 +1,59 @@
+# Environment and secrets — NEVER bake into image
+.env
+.env.*
+!.env.example
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Testing and coverage
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+.tox/
+
+# Development tooling
+plans/
+.worktrees/
+.git/
+.gitignore
+.github/
+
+# IDE / OS files
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Database files (use volumes instead)
+*.db
+*.sqlite
+
+# Documentation
+*.md
+docs/
+
+# Node (frontend handled by Dockerfile.frontend)
+dashboard/node_modules/
+dashboard/dist/

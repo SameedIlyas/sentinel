@@ -1,0 +1,45 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "sentinel-ai.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "sentinel-ai.labels" . | nindent 4 }}
+  annotations:
+    {{- toYaml .Values.ingress.annotations | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host }}
+      secretName: {{ .Values.ingress.tls.secretName }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          # API traffic → backend service
+          - path: /v1
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "sentinel-ai.fullname" . }}-backend
+                port:
+                  name: http
+          # Health check → backend
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: {{ include "sentinel-ai.fullname" . }}-backend
+                port:
+                  name: http
+          # Everything else → frontend SPA
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "sentinel-ai.fullname" . }}-frontend
+                port:
+                  name: http
+{{- end }}

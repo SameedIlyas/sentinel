@@ -1,0 +1,111 @@
+# =============================================================================
+# Sentinel AI — Helm values
+#
+# SECURITY: No secrets belong in this file.
+# All sensitive values (SECRET_KEY, DB passwords, tokens) must be stored in
+# a Kubernetes Secret and referenced via secretKeyRef in the deployment templates.
+# Create the secret before deploying:
+#
+#   kubectl create secret generic sentinel-secrets \
+#     --from-literal=SECRET_KEY="$(openssl rand -hex 32)" \
+#     --from-literal=DATABASE_URL="postgresql+psycopg2://user:pass@host/db" \
+#     --from-literal=REDIS_URL="redis://:pass@redis:6379/0" \
+#     --from-literal=POSTGRES_PASSWORD="strongpassword" \
+#     --from-literal=REDIS_PASSWORD="strongpassword"
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Global
+# ---------------------------------------------------------------------------
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+
+# Name of the Kubernetes Secret containing all sensitive env vars
+# Created externally — see header comment above
+secretName: sentinel-secrets
+
+# ---------------------------------------------------------------------------
+# Backend
+# ---------------------------------------------------------------------------
+backend:
+  image:
+    repository: sentinel-ai/backend
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+
+  replicaCount: 2
+
+  service:
+    type: ClusterIP
+    port: 8000
+
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+
+  # Non-sensitive env vars only — secrets come from secretName above
+  env:
+    APP_ENV: production
+    LOG_LEVEL: INFO
+    DEBUG: "false"
+    ALGORITHM: HS256
+    ACCESS_TOKEN_EXPIRE_MINUTES: "1440"
+    RATE_LIMIT_PER_MINUTE: "1000"
+    DICOM_MAX_FILE_SIZE_MB: "50"
+
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# ---------------------------------------------------------------------------
+# Frontend
+# ---------------------------------------------------------------------------
+frontend:
+  image:
+    repository: sentinel-ai/frontend
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+
+  replicaCount: 2
+
+  service:
+    type: ClusterIP
+    port: 80
+
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
+
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# ---------------------------------------------------------------------------
+# Ingress
+# ---------------------------------------------------------------------------
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "55m"  # DICOM_MAX_FILE_SIZE_MB + overhead
+  host: sentinel.example.com
+  tls:
+    secretName: sentinel-tls  # Pre-provisioned TLS secret (cert-manager or manual)
+
+# ---------------------------------------------------------------------------
+# Network Policy
+# ---------------------------------------------------------------------------
+networkPolicy:
+  enabled: true
