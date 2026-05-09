@@ -1,6 +1,5 @@
 """Google Gemini API adapter for Sentinel SDK."""
 
-import json
 import logging
 from typing import Any, Dict, List
 

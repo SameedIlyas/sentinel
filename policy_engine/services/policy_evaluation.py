@@ -229,7 +229,7 @@ class PolicyEvaluationService:
         """
         # Query enabled policies that apply to this agent or all agents
         policies = self.db.query(Policy).filter(
-            Policy.enabled == True
+            Policy.enabled.is_(True)
         ).all()
         
         # Filter by agent applicability

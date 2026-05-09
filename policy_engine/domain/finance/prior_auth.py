@@ -1,9 +1,9 @@
 """Prior Authorization domain logic — pure Python, CMS-0057-F compliant."""
 import hashlib
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 
 class PriorAuthDecision(str, Enum):

@@ -5,7 +5,6 @@ Provides aggregated metrics and statistics for the dashboard overview.
 """
 
 from datetime import datetime, timedelta
-from typing import Dict
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, desc
@@ -83,7 +82,7 @@ async def get_dashboard_metrics(
     
     # 5. Recent alerts (last 10 unacknowledged alerts)
     recent_alerts_query = db.query(Alert).filter(
-        Alert.acknowledged == False
+        Alert.acknowledged.is_(False)
     ).order_by(desc(Alert.timestamp)).limit(10).all()
     
     recent_alerts = [

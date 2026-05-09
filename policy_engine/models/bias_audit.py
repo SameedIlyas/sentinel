@@ -1,5 +1,5 @@
 """Bias Audit SQLAlchemy models."""
-from sqlalchemy import Column, String, DateTime, JSON, Float, ForeignKey, Boolean, Integer
+from sqlalchemy import Column, String, DateTime, Float, ForeignKey, Boolean, Integer
 from datetime import datetime
 import enum
 from policy_engine.database import Base

@@ -1,6 +1,5 @@
 """SQLAlchemy model for FHIR resource cache."""
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import Column, DateTime, ForeignKey, JSON, String
 

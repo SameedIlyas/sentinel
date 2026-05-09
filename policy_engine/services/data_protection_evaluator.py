@@ -269,7 +269,6 @@ class DataProtectionEvaluator:
             'mask': 'allowed with data masking'
         }
         
-        tool_name = context.get('tool_name', 'unknown tool')
         action = action_text.get(rule.action, rule.action)
         
         base_reason = f"Data access {action} by policy '{policy.name}'"

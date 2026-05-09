@@ -1,7 +1,7 @@
 """Model Card domain entities — pure Python, zero framework imports."""
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 
 class LifecycleStage(str, Enum):

@@ -1,7 +1,6 @@
 """Tool call interception mechanism for Sentinel SDK."""
 
 import inspect
-import time
 from datetime import datetime
 from typing import Any, Callable, Dict, Optional
 

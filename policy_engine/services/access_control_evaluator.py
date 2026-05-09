@@ -1,6 +1,6 @@
 """Access Control Policy Evaluator"""
 
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Tuple
 from policy_engine.models.policy import Policy
 from policy_engine.models.schemas import PolicyRuleCondition, PolicyRule
 from policy_engine.services.condition_matcher import ConditionMatcher
@@ -161,12 +161,6 @@ class AccessControlEvaluator:
         Returns:
             True if access is allowed
         """
-        # Add resource info to context
-        enhanced_context = {
-            **context,
-            'resource_type': resource_type,
-            'operation': operation
-        }
-        
-        # This could be used for more fine-grained access control
+        # resource_type and operation reserved for future fine-grained access control
+        del context, resource_type, operation
         return True

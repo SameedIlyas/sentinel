@@ -1,7 +1,6 @@
 """Bias audit domain logic — pure Python math, no ML framework required."""
 from dataclasses import dataclass
 from typing import Dict, List, Optional
-import math
 
 
 def disparate_impact_ratio(group_rate: float, reference_rate: float) -> float:

@@ -1,5 +1,5 @@
 """Shadow AI SQLAlchemy models."""
-from sqlalchemy import Column, String, DateTime, Float, ForeignKey, Boolean, Integer
+from sqlalchemy import Column, String, DateTime, Float, ForeignKey, Integer
 from datetime import datetime
 from policy_engine.database import Base
 

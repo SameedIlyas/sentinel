@@ -185,7 +185,7 @@ def trigger_alert(
         # Check for alert-type specific webhook
         alert_rule = db.query(AlertConfig).filter(
             AlertConfig.alert_type == alert_type,
-            AlertConfig.enabled == True
+            AlertConfig.enabled.is_(True)
         ).first()
         
         if alert_rule and alert_rule.slack_webhook_url:
@@ -338,7 +338,7 @@ async def check_policies_batch(
         if request.agent_id != agent_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Agent ID mismatch in batch request"
+                detail="Agent ID mismatch in batch request"
             )
     
     # Register or update agent activity (use first request for metadata)

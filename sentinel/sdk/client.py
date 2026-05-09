@@ -1,9 +1,8 @@
 """HTTP client for Sentinel middleware communication."""
 
-import json
 import logging
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 from urllib.parse import urljoin
 
 try:
@@ -157,7 +156,7 @@ class MiddlewareClient:
             
             return response
             
-        except MiddlewareClientError as e:
+        except MiddlewareClientError:
             # Mark failure
             self._mark_failure()
             

@@ -1,7 +1,7 @@
 """Policy validation service"""
 
 import re
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
 
 from policy_engine.models.schemas import (
@@ -248,7 +248,7 @@ class PolicyValidator:
         # Query existing policies of the same type
         query = self.db.query(Policy).filter(
             Policy.policy_type == policy_data.policy_type,
-            Policy.enabled == True
+            Policy.enabled.is_(True)
         )
         
         if exclude_policy_id:

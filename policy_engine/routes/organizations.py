@@ -8,7 +8,7 @@ from datetime import datetime
 
 from policy_engine.database import get_db
 from policy_engine.auth.rbac import get_current_user
-from policy_engine.models.organization import Organization, OrganizationMember, OrgType
+from policy_engine.models.organization import Organization, OrganizationMember
 from policy_engine.models.user import User, UserRole
 from pydantic import BaseModel
 

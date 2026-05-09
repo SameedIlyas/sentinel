@@ -1,5 +1,5 @@
 """Model Card SQLAlchemy models."""
-from sqlalchemy import Column, String, DateTime, JSON, Enum, Float, ForeignKey, Integer
+from sqlalchemy import Column, String, DateTime, JSON, Float, ForeignKey
 from datetime import datetime
 import enum
 from policy_engine.database import Base

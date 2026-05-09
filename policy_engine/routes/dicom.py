@@ -10,7 +10,6 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from policy_engine.auth.rbac import get_current_user
-from policy_engine.config import settings
 from policy_engine.database import get_db
 from policy_engine.models.user import User, UserRole
 from policy_engine.services.dicom_service import (

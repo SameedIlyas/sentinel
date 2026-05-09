@@ -13,7 +13,7 @@ from policy_engine.domain.finance.revenue_cycle import (
     RevenueFindings, compute_risk_score, detect_modifier_abuse,
     detect_unbundling, detect_upcoding,
 )
-from policy_engine.models.revenue_cycle import CodingBenchmark, RevenueCycleAudit, RevenueCycleFinding
+from policy_engine.models.revenue_cycle import CodingBenchmark, RevenueCycleAudit
 from policy_engine.models.user import has_permission
 
 router = APIRouter()

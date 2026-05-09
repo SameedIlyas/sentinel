@@ -1,9 +1,8 @@
 """Audit log endpoints"""
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Response
-from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_
+from sqlalchemy import or_
 from typing import Optional, Literal
 from datetime import datetime
 import uuid
@@ -17,8 +16,7 @@ from policy_engine.models.audit_log import AuditLog, Decision
 from policy_engine.models.schemas import (
     AuditLogCreate,
     AuditLogResponse,
-    AuditLogListResponse,
-    AuditLogSearchRequest
+    AuditLogListResponse
 )
 from policy_engine.services.audit_retention import retention_service
 

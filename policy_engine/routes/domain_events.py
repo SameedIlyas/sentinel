@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import Column, DateTime, JSON, String, text
+from sqlalchemy import Column, DateTime, JSON, String
 from sqlalchemy.orm import Session
 
 from policy_engine.auth.rbac import get_current_user

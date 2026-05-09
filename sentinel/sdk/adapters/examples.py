@@ -7,11 +7,7 @@ to intercept and monitor AI agent tool calls.
 
 from sentinel.sdk import (
     secure_agent,
-    get_default_registry,
-    OpenAIAdapter,
-    AnthropicAdapter,
-    AzureOpenAIAdapter,
-    GeminiAdapter
+    get_default_registry
 )
 
 
@@ -227,7 +223,7 @@ def manual_adapter_example():
 # Example 6: Custom adapter registration
 # =======================================
 
-from sentinel.sdk.llm_adapter import LLMAdapter, LLMRequest, ToolCall, LLMAdapterRegistry
+from sentinel.sdk.llm_adapter import LLMAdapter, LLMRequest, ToolCall
 from typing import Dict, List, Any
 
 

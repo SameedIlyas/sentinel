@@ -66,3 +66,26 @@ python_version = "3.8"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint.per-file-ignores]
+# Tests rely on conftest-loaded .env.test (load_dotenv before policy_engine imports),
+# unused locals captured for assertion inspection, and intentional re-imports.
+"tests/**/*.py" = ["E402", "F841", "F811"]
+# Sentinel SDK feature-flag pattern: import is the availability probe.
+"sentinel/sdk/__init__.py" = ["F401"]
+# examples.py is a tutorial file with section-local imports for clarity.
+"sentinel/sdk/adapters/examples.py" = ["E402"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+asyncio_mode = "auto"
+filterwarnings = [
+    "ignore::DeprecationWarning:pydantic.*",
+    "ignore::DeprecationWarning:passlib.*",
+    "ignore::PendingDeprecationWarning",
+]

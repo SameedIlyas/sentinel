@@ -14,7 +14,6 @@ from policy_engine.models.schemas import (
     AlertResponse,
     AlertListResponse,
     AlertAcknowledge,
-    AlertRuleCreate,
     AlertRuleResponse,
     AlertConfigRequest,
     SlackConfig
@@ -304,7 +303,7 @@ async def list_alert_rules(
     )
     
     if enabled_only:
-        query = query.filter(AlertConfig.enabled == True)
+        query = query.filter(AlertConfig.enabled.is_(True))
     
     rules = query.all()
     

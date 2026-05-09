@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 from policy_engine.auth.rbac import get_current_user
 from policy_engine.database import get_db
 from policy_engine.domain.regulatory.technical_file import (
-    LIFECYCLE_TRANSITIONS,
     RegulatoryType,
     TechnicalFileEntity,
     TechnicalFileLifecycle,

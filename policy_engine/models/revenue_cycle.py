@@ -1,5 +1,5 @@
 """Revenue Cycle SQLAlchemy models."""
-from sqlalchemy import Column, String, DateTime, JSON, Float, ForeignKey, Boolean
+from sqlalchemy import Column, String, DateTime, JSON, Float, ForeignKey
 from datetime import datetime
 from policy_engine.database import Base
 

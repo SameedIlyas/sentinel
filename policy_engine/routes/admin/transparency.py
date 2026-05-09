@@ -1,5 +1,5 @@
 """Transparency Portal routes — /v1/transparency/*"""
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
@@ -7,7 +7,7 @@ import uuid
 
 from policy_engine.database import get_db
 from policy_engine.auth.rbac import get_current_user, get_current_user_optional
-from policy_engine.models.user import User, UserRole, has_permission
+from policy_engine.models.user import User, UserRole
 from policy_engine.models.transparency import (
     TransparencyRecordModel,
     TransparencyVersion,

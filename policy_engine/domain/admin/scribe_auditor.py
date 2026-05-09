@@ -2,7 +2,7 @@
 import re
 import hashlib
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 REQUIRED_SECTIONS = [
     "HPI",

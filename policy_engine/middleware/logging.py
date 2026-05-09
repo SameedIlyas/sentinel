@@ -5,7 +5,6 @@ import time
 import uuid
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import Response
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +20,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         # Log request
         start_time = time.time()
         logger.info(
-            f"Request started",
+            "Request started",
             extra={
                 "correlation_id": correlation_id,
                 "method": request.method,
@@ -36,7 +35,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         # Log response
         duration = time.time() - start_time
         logger.info(
-            f"Request completed",
+            "Request completed",
             extra={
                 "correlation_id": correlation_id,
                 "method": request.method,

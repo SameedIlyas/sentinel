@@ -3,7 +3,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Tuple
 
 from policy_engine.models.agent import Agent, AgentStatus
 from policy_engine.models.audit_log import AuditLog

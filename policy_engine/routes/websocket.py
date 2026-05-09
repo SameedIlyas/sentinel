@@ -15,7 +15,6 @@ from typing import List, Set
 
 from policy_engine.database import get_db
 from policy_engine.routes.dashboard import get_dashboard_metrics
-from policy_engine.models.user import User
 
 logger = logging.getLogger(__name__)
 

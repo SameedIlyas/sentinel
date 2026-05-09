@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
 try:
-    from pydantic import BaseModel, Field
+    from pydantic import BaseModel, Field  # noqa: F401  (re-exported for downstream models)
 except ImportError:
     # Fallback for environments without pydantic
     class BaseModel:  # type: ignore

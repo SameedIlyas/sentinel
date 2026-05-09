@@ -2,12 +2,12 @@
 
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Dict, Any
+from typing import Optional
 import logging
 import uuid
 
 from policy_engine.models.alert import Alert, AlertSeverity
-from policy_engine.models.schemas import AlertCreate, PolicyType
+from policy_engine.models.schemas import PolicyType
 
 logger = logging.getLogger(__name__)
 

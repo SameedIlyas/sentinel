@@ -8,7 +8,7 @@ from typing import Dict, List, Optional
 import httpx
 
 from policy_engine.infrastructure.security.phi_redaction import PHIRedactionEngine
-from policy_engine.services.url_validator import SSRFBlockedError, validate_external_url
+from policy_engine.services.url_validator import validate_external_url
 
 logger = logging.getLogger(__name__)
 

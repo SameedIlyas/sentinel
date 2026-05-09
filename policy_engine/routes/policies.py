@@ -14,8 +14,7 @@ from policy_engine.models.schemas import (
     PolicyUpdate,
     PolicyResponse,
     PolicyListResponse,
-    PolicyDeleteResponse,
-    PolicyValidationResponse
+    PolicyDeleteResponse
 )
 from policy_engine.services.policy_validator import PolicyValidator
 

@@ -123,8 +123,8 @@ def secure_agent(
             wrapper._sentinel_config = sentinel_config  # type: ignore
             wrapper._sentinel_interceptor = interceptor  # type: ignore
             
-            # Intercept the call and extract metadata
-            call_metadata = interceptor.intercept(
+            # Intercept the call (side-effects only — telemetry / policy checks)
+            interceptor.intercept(
                 func=func,
                 args=args,
                 kwargs=kwargs,

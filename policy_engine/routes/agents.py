@@ -3,7 +3,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import Optional
-from datetime import datetime
 import math
 
 from policy_engine.database import get_db
@@ -13,7 +12,6 @@ from policy_engine.models.schemas import (
     AgentResponse,
     AgentListResponse,
     AgentUpdate,
-    AgentCreate,
     AgentActivityMetrics,
     AgentMetricsResponse
 )

@@ -1,5 +1,4 @@
 """FHIR R4 async client with OAuth2 and caching."""
-import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
