@@ -20,6 +20,7 @@ import FolderSpecialIcon from '@mui/icons-material/FolderSpecial';
 import { useQuery } from '@tanstack/react-query';
 import { listTechnicalFiles } from '@/api/healthcare';
 import { TechnicalFile, TechnicalFileLifecycle, RegulatoryType } from '@/types';
+import EmptyState from '@/components/common/EmptyState';
 
 const LIFECYCLE_STAGES: Array<{ value: TechnicalFileLifecycle | 'all'; label: string }> = [
   { value: 'all', label: 'All' },
@@ -167,10 +168,13 @@ const TechnicalFiles: React.FC = () => {
               <SkeletonRows cols={7} />
             ) : items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} align="center">
-                  <Typography variant="body2" color="text.secondary" sx={{ py: 4 }}>
-                    No technical files found.
-                  </Typography>
+                <TableCell colSpan={7} sx={{ p: 0, border: 0 }}>
+                  <EmptyState
+                    title={lifecycleFilter !== 'all' ? `No ${lifecycleFilter} files` : 'No technical files yet'}
+                    description="FDA 510(k) and EU MDR submissions live here. Each file aggregates device description, intended use, performance data, risk management, and clinical evaluation sections."
+                    ingestHint="Today: create per-submission, fill sections by hand. Roadmap: auto-populate sections from linked model cards, bias audits, and PMS reports — and re-version when the underlying data changes."
+                    icon={<FolderSpecialIcon />}
+                  />
                 </TableCell>
               </TableRow>
             ) : (

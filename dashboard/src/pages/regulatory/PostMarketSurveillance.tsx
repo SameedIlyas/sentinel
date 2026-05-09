@@ -20,6 +20,7 @@ import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { listPMSReports, generatePSUR } from '@/api/healthcare';
 import { PMSReport, PMSReportStatus } from '@/types';
+import EmptyState from '@/components/common/EmptyState';
 
 function statusColor(
   status: PMSReportStatus
@@ -150,10 +151,20 @@ const PostMarketSurveillance: React.FC = () => {
               <SkeletonRows cols={5} />
             ) : items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} align="center">
-                  <Typography variant="body2" color="text.secondary" sx={{ py: 4 }}>
-                    No PMS reports found.
-                  </Typography>
+                <TableCell colSpan={5} sx={{ p: 0, border: 0 }}>
+                  <EmptyState
+                    title="No PMS reports yet"
+                    description="Periodic Safety Update Reports (PSUR) consolidate adverse-event counts, drift alerts, decision volume, and bias-audit deltas over each reporting period — required annually by EU MDR and quarterly for FDA-registered devices."
+                    ingestHint="Click 'Generate PSUR' to draft a report from the last reporting period. Roadmap: scheduled job that auto-drafts each quarter and pings the compliance officer to review."
+                    icon={<MonitorHeartIcon />}
+                    primaryAction={{
+                      label: 'Generate PSUR',
+                      onClick: () => {
+                        setPsurSuccess(false);
+                        generateMutation.mutate();
+                      },
+                    }}
+                  />
                 </TableCell>
               </TableRow>
             ) : (

@@ -20,6 +20,7 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { useQuery } from '@tanstack/react-query';
 import { listAdverseEvents } from '@/api/healthcare';
 import { AdverseEvent, AdverseEventSeverity, AdverseEventStatus } from '@/types';
+import EmptyState from '@/components/common/EmptyState';
 
 const SEVERITY_FILTERS: Array<{ value: AdverseEventSeverity | 'all'; label: string }> = [
   { value: 'all', label: 'All' },
@@ -188,10 +189,13 @@ const AdverseEvents: React.FC = () => {
               <SkeletonRows cols={8} />
             ) : items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} align="center">
-                  <Typography variant="body2" color="text.secondary" sx={{ py: 4 }}>
-                    No adverse events found.
-                  </Typography>
+                <TableCell colSpan={8} sx={{ p: 0, border: 0 }}>
+                  <EmptyState
+                    title={severityFilter !== 'all' ? `No ${severityFilter}-severity events` : 'No adverse events recorded'}
+                    description="Adverse events are post-market AI failures that affected (or could have affected) patient safety. Each is classified, investigated, and — if reportable — submitted to FDA via the MAUDE portal."
+                    ingestHint="Events are auto-classified by the policy engine when blocked decisions match safety-critical patterns, OR can be manually reported by clinicians and care teams via /v1/regulatory/adverse-events."
+                    icon={<WarningAmberIcon />}
+                  />
                 </TableCell>
               </TableRow>
             ) : (

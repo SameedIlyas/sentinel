@@ -130,13 +130,27 @@ export const useWebSocket = (url: string, options: UseWebSocketOptions = {}) => 
 };
 
 /**
+ * Build a WebSocket URL relative to the configured API base, appending the
+ * JWT from localStorage as a query string parameter so the backend
+ * `_authenticate_ws_token` check can validate the connection. Falls back
+ * to localhost:8000 when VITE_API_BASE_URL is unset (dev default).
+ */
+function buildWsUrl(path: string): string {
+  const apiBase = (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:8000';
+  const wsBase = apiBase.replace(/^http/i, 'ws').replace(/\/$/, '');
+  const token = localStorage.getItem('access_token') || '';
+  const qs = token ? `?token=${encodeURIComponent(token)}` : '';
+  return `${wsBase}${path}${qs}`;
+}
+
+/**
  * Hook specifically for dashboard metrics WebSocket
  */
 export const useDashboardWebSocket = (
   onMetricsUpdate: (metrics: any) => void,
   enabled = true
 ) => {
-  const wsUrl = `ws://localhost:8000/ws/dashboard`;
+  const wsUrl = buildWsUrl('/ws/dashboard');
 
   const handleMessage = useCallback(
     (message: WebSocketMessage) => {
@@ -176,7 +190,7 @@ export const useEventsWebSocket = (
   onEvent: (eventType: string, data: any) => void,
   enabled = true
 ) => {
-  const wsUrl = `ws://localhost:8000/ws/events`;
+  const wsUrl = buildWsUrl('/ws/events');
 
   const handleMessage = useCallback(
     (message: WebSocketMessage) => {

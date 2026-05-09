@@ -10,6 +10,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { getRiskPortfolio } from '@/api/healthcare';
 import { RiskLevel, RiskTrend } from '@/types/index';
+import EmptyState from '@/components/common/EmptyState';
 
 const RISK_COLORS: Record<RiskLevel, string> = {
   critical: '#df1b41',
@@ -145,8 +146,13 @@ const RiskPortfolio: React.FC = () => {
               <SkeletonRows />
             ) : !data || data.models.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
-                  <Typography color="text.secondary">No models found</Typography>
+                <TableCell colSpan={6} sx={{ p: 0, border: 0 }}>
+                  <EmptyState
+                    title="No risk-scored models yet"
+                    description="Risk scores combine severity (patient-safety, data-sensitivity, model-confidence, bias, drift) with exposure (patient volume, decision frequency, automation level) and apply a regulatory multiplier."
+                    ingestHint="Today: POST risk scores to /v1/risk/scores when model factors are known. Roadmap: a daily background job that recomputes scores from the latest bias audits, drift measurements, adverse events, and audit-log volume."
+                    icon={<SpeedIcon />}
+                  />
                 </TableCell>
               </TableRow>
             ) : (
