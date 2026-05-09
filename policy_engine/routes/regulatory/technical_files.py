@@ -23,6 +23,9 @@ from policy_engine.models.technical_file import (
     TechnicalFileVersion,
 )
 from policy_engine.models.user import has_permission
+from policy_engine.services.technical_file_auto_service import (
+    populate_from_model_card,
+)
 
 router = APIRouter()
 
@@ -55,6 +58,11 @@ class SectionCreate(BaseModel):
 class SectionUpdate(BaseModel):
     content: Optional[str] = None
     order_index: Optional[int] = None
+
+
+class AutoPopulateRequest(BaseModel):
+    model_card_id: str
+    overwrite: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -280,6 +288,45 @@ def submit_technical_file(
     db.commit()
     db.refresh(tf)
     return _file_to_dict(tf)
+
+
+@router.post("/technical-files/{file_id}/auto-populate")
+def auto_populate_technical_file(
+    file_id: str,
+    body: AutoPopulateRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Tier 2 Sprint 4 — auto-populate sections from a linked model card,
+    its bias audits, adverse events, and PMS history.
+
+    Existing human-authored sections are never overwritten. Existing
+    auto-generated sections are only refreshed when `overwrite=true`.
+    """
+    if not has_permission(current_user.role, "technical_files", "update"):
+        raise HTTPException(403, "Forbidden")
+
+    _get_file_or_404(db, file_id, current_user.organization_id)
+
+    outcome = populate_from_model_card(
+        db,
+        technical_file_id=file_id,
+        model_card_id=body.model_card_id,
+        overwrite=body.overwrite,
+    )
+    if outcome.errors:
+        if "model_card_not_found" in outcome.errors:
+            raise HTTPException(404, "Linked model card not found")
+        if "technical_file_not_found" in outcome.errors:
+            raise HTTPException(404, "Technical file not found")
+
+    return {
+        "file_id": outcome.file_id,
+        "sections_created": outcome.sections_created,
+        "sections_updated": outcome.sections_updated,
+        "sections_skipped": outcome.sections_skipped,
+        "errors": outcome.errors,
+    }
 
 
 @router.post("/technical-files/{file_id}/sections", status_code=201)
