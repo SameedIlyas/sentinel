@@ -1,11 +1,12 @@
 """Drift Detection endpoints — baselines, measurements, alerts."""
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 import uuid
 from datetime import datetime
 
 from policy_engine.database import get_db
+from policy_engine.auth.api_key import get_current_agent
 from policy_engine.auth.rbac import get_current_user
 from policy_engine.models.user import User, has_permission
 from policy_engine.models.drift import DriftBaseline, DriftMeasurementModel, DriftAlert
@@ -15,7 +16,8 @@ from policy_engine.domain.clinical.drift_detector import (
     performance_drift_detected,
     severity_from_psi,
 )
-from pydantic import BaseModel
+from policy_engine.services.drift_ingestion import ingest_inference_batch
+from pydantic import BaseModel, Field
 
 router = APIRouter()
 
@@ -36,6 +38,23 @@ class DriftMeasureRequest(BaseModel):
     baseline_id: str
     current_distributions: dict
     current_performance: dict
+
+
+class DriftLogBatchRequest(BaseModel):
+    """Tier 2 Sprint 5 — accepts batched inference records from the SDK
+    `drift_logger`. Each record carries the model's input features (and
+    optionally the prediction + ground truth + latency).
+
+    Records are buffered server-side; the periodic recompute job converts the
+    buffer into PSI / KS measurements and DriftAlerts.
+    """
+
+    baseline_id: str = Field(..., description="DriftBaseline ID to attach to")
+    model_id: Optional[str] = None
+    records: List[Dict[str, Any]] = Field(
+        ..., min_length=1, max_length=5000,
+        description="Inference records. Each must include `features` (dict).",
+    )
 
 
 class DriftBaselineResponse(BaseModel):
@@ -239,6 +258,41 @@ def measure_drift(
         "psi_scores": {k: float(v) for k, v in psi_scores.items()},
         "ks_scores": {k: float(v) for k, v in ks_scores.items()},
         "alerts_created": len(alerts_created),
+    }
+
+
+@router.post("/drift/log-batch", status_code=status.HTTP_202_ACCEPTED)
+def log_drift_batch(
+    payload: DriftLogBatchRequest,
+    db: Session = Depends(get_db),
+    agent_id: str = Depends(get_current_agent),
+):
+    """Tier 2 Sprint 5 — SDK drift logger batch endpoint.
+
+    Accepts batched inference records from production model servers and
+    appends them to the rolling drift buffer. Returns immediately with
+    `accepted` / `rejected` counts. The periodic background recompute job
+    turns the buffer into measurements + alerts.
+
+    Authenticated via SDK API key (`X-API-Key`).
+    """
+    outcome = ingest_inference_batch(
+        db,
+        baseline_id=payload.baseline_id,
+        records=payload.records,
+        model_id=payload.model_id,
+    )
+    if outcome.measurement_id is None and outcome.accepted == 0 and outcome.rejected:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="DriftBaseline not found",
+        )
+    return {
+        "baseline_id": payload.baseline_id,
+        "accepted": outcome.accepted,
+        "rejected": outcome.rejected,
+        "buffer_measurement_id": outcome.measurement_id,
+        "agent_id": agent_id,
     }
 
 

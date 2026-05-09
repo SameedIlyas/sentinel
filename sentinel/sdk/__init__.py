@@ -21,6 +21,7 @@ from sentinel.sdk.adapters import (
     GeminiAdapter,
     get_default_registry
 )
+from sentinel.sdk import drift_logger, shadow_ai  # noqa: F401 — re-exported namespaces
 
 __all__ = [
     "secure_agent",
@@ -43,6 +44,8 @@ __all__ = [
     "AnthropicAdapter",
     "AzureOpenAIAdapter",
     "GeminiAdapter",
-    "get_default_registry"
+    "get_default_registry",
+    "drift_logger",
+    "shadow_ai",
 ]
 
