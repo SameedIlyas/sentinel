@@ -32,6 +32,20 @@ class ModelCard(Base):
     bias_summary = Column(JSON, default=dict, nullable=False)
     fda_status = Column(String, nullable=True)
     chai_version = Column(String, default="1.0", nullable=False)
+
+    # ─── Pinned artifact lineage (CHAI requires identity to be immutable) ───
+    # When any of these change, a new card version is required before publish.
+    model_artifact_uri = Column(String, nullable=True)        # e.g. mlflow://runs/abc123/model or s3://bucket/path/model.pkl
+    training_dataset_sha256 = Column(String, nullable=True)   # 64-char hex of training data manifest
+    evaluation_dataset_sha256 = Column(String, nullable=True) # 64-char hex of eval data manifest
+    git_commit_sha = Column(String, nullable=True)            # full or short commit SHA of training code
+    framework_version = Column(String, nullable=True)         # e.g. "PyTorch 2.1.0+cu118"
+
+    # ─── External validation + monitoring (CHAI sections 5 & 9) ─────────────
+    external_validation = Column(JSON, default=dict, nullable=False)  # {sites:[], dates:[], n:[], auc:[]}
+    monitoring_plan = Column(JSON, default=dict, nullable=False)      # {drift_baseline_id, cadence, owner}
+    pccp = Column(JSON, default=dict, nullable=False)                  # Predetermined Change Control Plan
+
     organization_id = Column(String, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True)
     created_by = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

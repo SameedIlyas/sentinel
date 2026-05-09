@@ -500,7 +500,9 @@ class TestModelCardRoutes:
         assert r.status_code == 200
         assert r.json()["name"] == "Updated Name"
 
-    def test_publish_model_card(self):
+    def test_publish_model_card(self, monkeypatch):
+        # Phase 3 test: bypass the Sprint 3 bias-gate (covered by test_bias_audit_gate.py).
+        monkeypatch.setenv("BIAS_AUDIT_PUBLISH_GATE", "false")
         _ensure_tables()
         db = _get_test_db()
         try:
@@ -508,7 +510,17 @@ class TestModelCardRoutes:
         finally:
             db.close()
         client = _make_client()
-        cr = client.post("/v1/clinical/model-cards", json={"name": "Publish Test Card"}, headers=headers)
+        # Lineage required by publish gate
+        cr = client.post(
+            "/v1/clinical/model-cards",
+            json={
+                "name": "Publish Test Card",
+                "model_artifact_uri": "mlflow://runs/abc/model",
+                "training_dataset_sha256": "a" * 64,
+                "evaluation_dataset_sha256": "b" * 64,
+            },
+            headers=headers,
+        )
         assert cr.status_code == 201
         card_id = cr.json()["id"]
         # Move to review first
@@ -517,7 +529,8 @@ class TestModelCardRoutes:
         assert r.status_code == 200
         assert r.json()["lifecycle_stage"] == "published"
 
-    def test_retire_model_card(self):
+    def test_retire_model_card(self, monkeypatch):
+        monkeypatch.setenv("BIAS_AUDIT_PUBLISH_GATE", "false")
         _ensure_tables()
         db = _get_test_db()
         try:
@@ -525,7 +538,16 @@ class TestModelCardRoutes:
         finally:
             db.close()
         client = _make_client()
-        cr = client.post("/v1/clinical/model-cards", json={"name": "Retire Test Card"}, headers=headers)
+        cr = client.post(
+            "/v1/clinical/model-cards",
+            json={
+                "name": "Retire Test Card",
+                "model_artifact_uri": "mlflow://runs/abc/model",
+                "training_dataset_sha256": "a" * 64,
+                "evaluation_dataset_sha256": "b" * 64,
+            },
+            headers=headers,
+        )
         assert cr.status_code == 201
         card_id = cr.json()["id"]
         client.post(f"/v1/clinical/model-cards/{card_id}/review", headers=headers)
