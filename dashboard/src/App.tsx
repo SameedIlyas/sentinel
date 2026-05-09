@@ -10,6 +10,7 @@ import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import Login from '@/components/auth/Login';
 import AppLayout from '@/components/layout/AppLayout';
 import { UserRole } from '@/types';
+import { WalkthroughProvider } from '@/walkthrough';
 
 // ── Eager-loaded core pages (above the fold, small bundle impact) ──
 import Dashboard from '@/pages/Dashboard';
@@ -27,6 +28,7 @@ const Users              = React.lazy(() => import('@/pages/Users'));
 // Clinical Governance
 const ModelCardList      = React.lazy(() => import('@/pages/clinical/ModelCardList'));
 const ModelCardEditor    = React.lazy(() => import('@/pages/clinical/ModelCardEditor'));
+const BiasAuditList      = React.lazy(() => import('@/pages/clinical/BiasAuditList'));
 const BiasAuditDetail    = React.lazy(() => import('@/pages/clinical/BiasAuditDetail'));
 const DriftMonitor       = React.lazy(() => import('@/pages/clinical/DriftMonitor'));
 const HITLQueue          = React.lazy(() => import('@/pages/clinical/HITLQueue'));
@@ -101,11 +103,17 @@ function buildTheme(mode: PaletteMode) {
     components: {
       MuiCssBaseline: {
         styleOverrides: {
-          body: { backgroundColor: bg.default },
+          html: { overflowX: 'hidden' },
+          body: { backgroundColor: bg.default, overflowX: 'hidden' },
+          '#root': { overflowX: 'hidden' },
           '::-webkit-scrollbar':        { width: 6, height: 6 },
           '::-webkit-scrollbar-track':  { background: 'transparent' },
           '::-webkit-scrollbar-thumb':  { background: scrollThumb, borderRadius: 3 },
           '::-webkit-scrollbar-thumb:hover': { background: scrollHover },
+          // Make tables scroll horizontally on small screens instead of overflowing the viewport
+          '.MuiTableContainer-root': { maxWidth: '100%', overflowX: 'auto' },
+          // Prevent images / svg from forcing horizontal scroll on mobile
+          'img, svg, video, canvas, picture': { maxWidth: '100%' },
         },
       },
       MuiButton: {
@@ -171,7 +179,17 @@ function buildTheme(mode: PaletteMode) {
       },
       MuiTableCell: {
         styleOverrides: {
-          root: { borderBottom: `1px solid ${border}`, padding: '12px 16px', fontSize: '0.8125rem', color: text.primary },
+          root: {
+            borderBottom: `1px solid ${border}`,
+            padding: '12px 16px',
+            fontSize: '0.8125rem',
+            color: text.primary,
+            // Tighter padding on small screens so tables fit without crushing
+            '@media (max-width:600px)': {
+              padding: '10px 10px',
+              fontSize: '0.75rem',
+            },
+          },
           head: {
             fontWeight: 600,
             color: text.secondary,
@@ -181,6 +199,7 @@ function buildTheme(mode: PaletteMode) {
             backgroundColor: dark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)',
             paddingTop: 10,
             paddingBottom: 10,
+            whiteSpace: 'nowrap',
           },
         },
       },
@@ -217,6 +236,14 @@ function buildTheme(mode: PaletteMode) {
             border: `1px solid ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.1)'}`,
             borderRadius: 12,
             boxShadow: `0 24px 48px -12px ${dark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.15)'}`,
+            // On phones the dialog should breathe to viewport edges, not float small
+            '@media (max-width:600px)': {
+              margin: 8,
+              width: 'calc(100% - 16px)',
+              maxWidth: 'calc(100% - 16px) !important',
+              maxHeight: 'calc(100% - 16px)',
+              borderRadius: 8,
+            },
           },
         },
       },
@@ -267,7 +294,16 @@ function buildTheme(mode: PaletteMode) {
       },
       MuiTablePagination: {
         styleOverrides: {
-          root: { borderTop: `1px solid ${border}`, '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': { fontSize: '0.75rem' } },
+          root: {
+            borderTop: `1px solid ${border}`,
+            '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': { fontSize: '0.75rem' },
+            // On phones hide the rows-per-page label (the dropdown stays) so toolbar fits
+            '@media (max-width:600px)': {
+              '& .MuiTablePagination-selectLabel': { display: 'none' },
+              '& .MuiTablePagination-toolbar': { paddingLeft: 8, paddingRight: 8, minHeight: 44 },
+              '& .MuiTablePagination-actions': { marginLeft: 4 },
+            },
+          },
         },
       },
       MuiFormControl: {
@@ -310,8 +346,9 @@ const ThemedApp: React.FC = () => {
       <CssBaseline />
       <BrowserRouter>
         <AuthProvider>
-          <Suspense fallback={<PageFallback />}>
-            <Routes>
+          <WalkthroughProvider>
+            <Suspense fallback={<PageFallback />}>
+              <Routes>
               <Route path="/login" element={<Login />} />
 
               {/* ── Protected layout shell ── */}
@@ -344,6 +381,7 @@ const ThemedApp: React.FC = () => {
                 <Route path="/clinical/model-cards"        element={<ModelCardList />} />
                 <Route path="/clinical/model-cards/new"    element={<ModelCardEditor />} />
                 <Route path="/clinical/model-cards/:id"    element={<ModelCardEditor />} />
+                <Route path="/clinical/bias-audits"        element={<BiasAuditList />} />
                 <Route path="/clinical/bias-audits/:id"    element={<BiasAuditDetail />} />
                 <Route path="/clinical/drift"              element={<DriftMonitor />} />
                 <Route path="/clinical/hitl"               element={<HITLQueue />} />
@@ -394,9 +432,10 @@ const ThemedApp: React.FC = () => {
                 />
               </Route>
 
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </Suspense>
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Suspense>
+          </WalkthroughProvider>
         </AuthProvider>
       </BrowserRouter>
     </ThemeProvider>

@@ -3,7 +3,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   Box, AppBar, Toolbar, Typography, IconButton, Drawer, List, ListItem,
   ListItemButton, ListItemIcon, ListItemText, Divider, Avatar, Menu,
-  MenuItem, Chip, useTheme, Tooltip,
+  MenuItem, Chip, useTheme, Tooltip, useMediaQuery,
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import ChevronLeft from '@mui/icons-material/ChevronLeft';
@@ -47,6 +47,9 @@ import { useThemeMode } from '@/contexts/ThemeContext';
 import { useUIStore } from '@/stores/uiStore';
 import { getNavForRole } from '@/config/navigation';
 import { UserRole } from '@/types';
+import { WalkthroughOverlay, useWalkthrough } from '@/walkthrough';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import PageErrorBoundary from '@/components/common/PageErrorBoundary';
 
 const DRAWER_WIDTH = 236;
 const DRAWER_COLLAPSED = 66;
@@ -94,10 +97,23 @@ const AppLayout: React.FC = () => {
   const location = useLocation();
   const { user, logout } = useAuth();
   const { sidebarOpen, toggleSidebar } = useUIStore();
+  const { restart: restartWalkthrough } = useWalkthrough();
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
 
+  const handleRestartTour = () => {
+    setAnchorEl(null);
+    restartWalkthrough();
+  };
+
+  // Mobile uses a temporary (overlay) drawer that closes on navigation.
+  // Below the `md` breakpoint (<900px) we treat the layout as mobile.
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const [mobileOpen, setMobileOpen] = React.useState(false);
+
   const dark = mode === 'dark';
-  const currentWidth = sidebarOpen ? DRAWER_WIDTH : DRAWER_COLLAPSED;
+  const desktopWidth = sidebarOpen ? DRAWER_WIDTH : DRAWER_COLLAPSED;
+  // On mobile the sidebar overlays content, so the main column reserves no width for it.
+  const currentWidth = isMobile ? 0 : desktopWidth;
   const roleColor = ROLE_COLORS[user?.role ?? ''] ?? theme.palette.text.secondary;
 
   const navSections = user ? getNavForRole(user.role as UserRole) : [];
@@ -107,9 +123,26 @@ const AppLayout: React.FC = () => {
 
   const handleLogout = async () => {
     setAnchorEl(null);
+    setMobileOpen(false);
     await logout();
     navigate('/login');
   };
+
+  const handleNav = (path: string) => {
+    navigate(path);
+    if (isMobile) setMobileOpen(false);
+  };
+
+  const handleToolbarMenuClick = () => {
+    if (isMobile) {
+      setMobileOpen((open) => !open);
+    } else {
+      toggleSidebar();
+    }
+  };
+
+  // On mobile the drawer always shows the expanded layout; on desktop it follows sidebarOpen.
+  const drawerExpanded = isMobile ? true : sidebarOpen;
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
@@ -123,15 +156,23 @@ const AppLayout: React.FC = () => {
           transition: 'all 0.2s cubic-bezier(0.4,0,0.2,1)',
         }}
       >
-        <Toolbar sx={{ minHeight: '52px !important', px: { xs: 2, sm: 3 } }}>
+        <Toolbar sx={{ minHeight: '52px !important', px: { xs: 1.5, sm: 3 } }}>
           <IconButton
             edge="start"
-            onClick={toggleSidebar}
+            onClick={handleToolbarMenuClick}
             size="small"
             sx={{ mr: 1, color: 'text.secondary' }}
-            aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+            aria-label={
+              isMobile
+                ? mobileOpen ? 'Close menu' : 'Open menu'
+                : sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'
+            }
           >
-            {sidebarOpen ? <ChevronLeft fontSize="small" /> : <MenuIcon fontSize="small" />}
+            {isMobile
+              ? <MenuIcon fontSize="small" />
+              : sidebarOpen
+                ? <ChevronLeft fontSize="small" />
+                : <MenuIcon fontSize="small" />}
           </IconButton>
           <Box sx={{ flexGrow: 1 }} />
           <Tooltip title={dark ? 'Light mode' : 'Dark mode'}>
@@ -139,6 +180,7 @@ const AppLayout: React.FC = () => {
               onClick={toggleTheme}
               size="small"
               aria-label="Toggle theme"
+              data-walkthrough="theme-toggle"
               sx={{ mr: 1.5, color: 'text.secondary', border: `1px solid ${theme.palette.divider}`, width: 32, height: 32 }}
             >
               {dark ? <LightModeOutlined sx={{ fontSize: 16 }} /> : <DarkModeOutlined sx={{ fontSize: 16 }} />}
@@ -150,6 +192,7 @@ const AppLayout: React.FC = () => {
             tabIndex={0}
             onKeyDown={(e) => e.key === 'Enter' && setAnchorEl(e.currentTarget as HTMLElement)}
             aria-label="User menu"
+            data-walkthrough="user-menu"
             sx={{
               display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer',
               py: 0.5, px: 1, borderRadius: 1.5, border: '1px solid transparent',
@@ -178,6 +221,11 @@ const AppLayout: React.FC = () => {
               </Box>
             </MenuItem>
             <Divider sx={{ my: 0.5 }} />
+            <MenuItem onClick={handleRestartTour}>
+              <ListItemIcon><HelpOutlineIcon fontSize="small" sx={{ color: 'primary.main' }} /></ListItemIcon>
+              <Typography sx={{ color: 'text.primary', fontSize: '0.8125rem', fontWeight: 500 }}>Restart tour</Typography>
+            </MenuItem>
+            <Divider sx={{ my: 0.5 }} />
             <MenuItem onClick={handleLogout}>
               <ListItemIcon><LogoutIcon fontSize="small" sx={{ color: 'error.main' }} /></ListItemIcon>
               <Typography sx={{ color: 'error.main', fontSize: '0.8125rem', fontWeight: 500 }}>Sign out</Typography>
@@ -188,17 +236,26 @@ const AppLayout: React.FC = () => {
 
       {/* ── Sidebar ── */}
       <Drawer
-        variant="permanent"
+        variant={isMobile ? 'temporary' : 'permanent'}
+        open={isMobile ? mobileOpen : true}
+        onClose={() => setMobileOpen(false)}
+        ModalProps={{ keepMounted: true }}
+        PaperProps={{ 'data-walkthrough': 'sidebar' } as React.HTMLAttributes<HTMLDivElement>}
         sx={{
-          width: currentWidth, flexShrink: 0,
+          width: isMobile ? 0 : desktopWidth, flexShrink: 0,
           transition: 'width 0.2s cubic-bezier(0.4,0,0.2,1)',
-          '& .MuiDrawer-paper': { width: currentWidth, boxSizing: 'border-box', overflowX: 'hidden', transition: 'width 0.2s cubic-bezier(0.4,0,0.2,1)' },
+          '& .MuiDrawer-paper': {
+            width: isMobile ? Math.min(DRAWER_WIDTH + 24, 280) : desktopWidth,
+            boxSizing: 'border-box',
+            overflowX: 'hidden',
+            transition: 'width 0.2s cubic-bezier(0.4,0,0.2,1)',
+          },
         }}
       >
         {/* Logo */}
-        <Box sx={{ pt: 1.75, pb: 0.75, px: sidebarOpen ? 2.25 : 1.25, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 52 }}>
+        <Box sx={{ pt: 1.75, pb: 0.75, px: drawerExpanded ? 2.25 : 1.25, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 52 }}>
           <Box component="img" src="/sentinel.png" alt="Sentinel Governance AI"
-            sx={{ height: sidebarOpen ? 44 : 30, width: 'auto', objectFit: 'contain', flexShrink: 0 }} />
+            sx={{ height: drawerExpanded ? 44 : 30, width: 'auto', objectFit: 'contain', flexShrink: 0 }} />
         </Box>
         <Divider sx={{ mx: 1.75, my: 0.75 }} />
 
@@ -207,7 +264,7 @@ const AppLayout: React.FC = () => {
           {navSections.map((section, si) => (
             <Box key={section.section}>
               {si > 0 && <Divider sx={{ mx: 1.75, my: 0.5 }} />}
-              {sidebarOpen && (
+              {drawerExpanded && (
                 <Typography sx={{ px: 2.25, pt: si > 0 ? 1 : 0.5, pb: 0.25, fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'text.secondary' }}>
                   {section.section}
                 </Typography>
@@ -218,24 +275,25 @@ const AppLayout: React.FC = () => {
                   const icon = ICON_MAP[item.iconName] ?? <DashboardIcon sx={{ fontSize: 19 }} />;
                   return (
                     <ListItem key={item.path} disablePadding sx={{ mb: 0.25 }}>
-                      <Tooltip title={sidebarOpen ? '' : item.label} placement="right">
+                      <Tooltip title={drawerExpanded ? '' : item.label} placement="right">
                         <ListItemButton
-                          onClick={() => navigate(item.path)}
+                          onClick={() => handleNav(item.path)}
                           aria-label={item.label}
                           aria-current={active ? 'page' : undefined}
+                          data-walkthrough={`nav-${item.label}`}
                           sx={{
                             borderRadius: '6px', minHeight: 36,
-                            px: 1.25, justifyContent: sidebarOpen ? 'initial' : 'center',
+                            px: 1.25, justifyContent: drawerExpanded ? 'initial' : 'center',
                             position: 'relative',
                             bgcolor: active ? (dark ? 'rgba(99,91,255,0.1)' : 'rgba(99,91,255,0.06)') : 'transparent',
                             '&:hover': { bgcolor: active ? (dark ? 'rgba(99,91,255,0.14)' : 'rgba(99,91,255,0.09)') : (dark ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.03)') },
                             '&::before': active ? { content: '""', position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', width: 3, height: 18, borderRadius: '0 3px 3px 0', bgcolor: 'primary.main' } : {},
                           }}
                         >
-                          <ListItemIcon sx={{ color: active ? 'primary.main' : 'text.secondary', minWidth: sidebarOpen ? 34 : 'auto', justifyContent: 'center' }}>
+                          <ListItemIcon sx={{ color: active ? 'primary.main' : 'text.secondary', minWidth: drawerExpanded ? 34 : 'auto', justifyContent: 'center' }}>
                             {icon}
                           </ListItemIcon>
-                          {sidebarOpen && (
+                          {drawerExpanded && (
                             <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: '0.8125rem', fontWeight: active ? 600 : 450, color: active ? 'text.primary' : 'text.secondary' }} />
                           )}
                         </ListItemButton>
@@ -249,7 +307,7 @@ const AppLayout: React.FC = () => {
         </Box>
 
         {/* User card at bottom */}
-        {sidebarOpen && (
+        {drawerExpanded && (
           <Box sx={{ p: 1.5 }}>
             <Box sx={{ p: 1.25, borderRadius: '8px', bgcolor: dark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)', border: `1px solid ${theme.palette.divider}`, display: 'flex', alignItems: 'center', gap: 1.25 }}>
               <Avatar sx={{ width: 30, height: 30, bgcolor: 'primary.main', color: '#fff', fontSize: '0.7rem', fontWeight: 700 }}>
@@ -267,10 +325,26 @@ const AppLayout: React.FC = () => {
       </Drawer>
 
       {/* ── Main content ── */}
-      <Box component="main" sx={{ flexGrow: 1, px: { xs: 2, sm: 3 }, py: 2.5, transition: 'all 0.2s cubic-bezier(0.4,0,0.2,1)', minHeight: '100vh' }}>
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          width: { xs: '100%', md: `calc(100% - ${currentWidth}px)` },
+          px: { xs: 1.5, sm: 2.5, md: 3 },
+          py: { xs: 2, sm: 2.5 },
+          transition: 'all 0.2s cubic-bezier(0.4,0,0.2,1)',
+          minHeight: '100vh',
+          overflowX: 'hidden',
+        }}
+      >
         <Toolbar sx={{ minHeight: '52px !important' }} />
-        <Outlet />
+        <PageErrorBoundary resetKey={location.pathname}>
+          <Outlet />
+        </PageErrorBoundary>
       </Box>
+
+      {/* First-run walkthrough — auto-shows on first authenticated mount */}
+      <WalkthroughOverlay />
     </Box>
   );
 };
