@@ -53,3 +53,14 @@ Thumbs.db
 
 # Git worktrees
 .worktrees/
+
+# Local SQLite test/dev databases (use Postgres in deployed envs)
+sentinel.db
+test_*.db
+
+# Local agent / IDE assistant configs
+.claude/
+.cursor/
+
+# Test scratch scripts (numbered task scripts created during phase work)
+test_task_*.py

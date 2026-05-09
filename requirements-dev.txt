@@ -1,0 +1,20 @@
+# Development & quality-gate dependencies for the Sentinel AI platform.
+# Install with:  pip install -r requirements-dev.txt
+# Includes the runtime dependencies plus testing/lint/security tooling
+# required by the Phase Completion Gates in plans/sentinel-ai-platform-completion.md.
+
+-r policy_engine/requirements.txt
+
+# Testing
+pytest>=7.4.0,<9.0.0
+pytest-cov>=4.1.0,<8.0.0
+pytest-asyncio>=0.21.0,<1.0.0
+fakeredis>=2.20.0,<3.0.0
+
+# Quality gates (Phase Completion Gates)
+bandit>=1.7.5,<2.0.0
+mypy>=1.5.0,<2.0.0
+ruff>=0.4.0,<1.0.0
+black>=23.7.0,<26.0.0
+isort>=5.12.0,<6.0.0
+safety>=3.0.0,<4.0.0
