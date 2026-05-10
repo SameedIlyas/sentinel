@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Sentinel Clinic — Setup</title>
+  <style>
+    body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; margin: 24px; max-width: 520px; color: #1a1f36; }
+    h1 { margin: 0 0 4px; font-size: 18px; }
+    p.lead { color: #697386; margin: 0 0 20px; font-size: 13px; }
+    label { display: block; font-size: 12px; color: #697386; margin: 14px 0 4px; }
+    input { width: 100%; padding: 8px 10px; border: 1px solid #e3e8ee; border-radius: 6px; font-size: 13px; }
+    button { margin-top: 16px; padding: 8px 14px; border: 0; border-radius: 6px; background: #635bff; color: white; font-weight: 600; cursor: pointer; }
+    .ok { color: #0ea371; font-size: 12px; margin-top: 10px; display: none; }
+    .help { font-size: 11px; color: #8b8fa3; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Sentinel Clinic — setup</h1>
+  <p class="lead">Paste the extension token from your practice's Sentinel dashboard. Sentinel staff cannot see this token.</p>
+  <label for="token">Extension token</label>
+  <input id="token" type="password" autocomplete="off" />
+  <p class="help">Find this in the Sentinel dashboard under <em>Practice → Shadow AI watcher</em>.</p>
+  <label for="endpoint">Sentinel endpoint</label>
+  <input id="endpoint" type="text" placeholder="https://api.sentinel.your-clinic.com" />
+  <button id="save">Save</button>
+  <div id="ok" class="ok">Saved.</div>
+  <script src="options.js"></script>
+</body>
+</html>

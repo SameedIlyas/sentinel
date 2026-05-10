@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Sentinel Clinic — Shadow AI Watcher",
+  "short_name": "Sentinel Clinic",
+  "version": "0.1.0",
+  "description": "Spots AI tools used on clinic devices and reports DNS+fingerprint observations to Sentinel. No patient information is transmitted.",
+  "permissions": [
+    "storage",
+    "webRequest",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "options_page": "options.html",
+  "action": {
+    "default_title": "Sentinel Clinic"
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
+}
