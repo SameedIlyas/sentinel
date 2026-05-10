@@ -127,8 +127,16 @@ def make_clinic_admin(
     db.add(user)
     db.commit()
     db.refresh(user)
+    # Match production routes/auth.py:105 — get_current_user reads "user_id".
+    # The existing tests/conftest.py admin_user_jwt fixture uses "sub" instead,
+    # which is broken (silently returns 401) but is never asserted because
+    # those tests bypass get_current_user.
     token = create_access_token(
-        data={"sub": user.id, "username": user.username, "role": user.role.value}
+        data={
+            "user_id": user.id,
+            "username": user.username,
+            "role": user.role.value,
+        }
     )
     return user, token
 
