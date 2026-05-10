@@ -30,6 +30,17 @@ from policy_engine.routes.regulatory import risk_scores as regulatory_risk_score
 from policy_engine.routes import fhir as fhir_routes
 from policy_engine.routes import dicom as dicom_routes
 from policy_engine.routes import domain_events as domain_events_routes
+# Clinic-tier routes
+from policy_engine.routes.clinic import tools as clinic_tools
+from policy_engine.routes.clinic import onboarding as clinic_onboarding
+from policy_engine.routes.clinic import reports as clinic_reports
+from policy_engine.routes.clinic import policy_templates as clinic_policy_templates
+from policy_engine.routes.clinic import alerts as clinic_alerts
+from policy_engine.routes.clinic import baa as clinic_baa
+from policy_engine.routes.clinic import settings as clinic_settings
+from policy_engine.routes.clinic import shadow_ai as clinic_shadow_ai
+from policy_engine.routes.clinic import dashboard as clinic_dashboard
+from policy_engine.routes.billing import clinic as billing_clinic
 
 # Import clinical models so they are registered with Base
 from policy_engine.models import model_card, bias_audit, drift, hitl  # noqa: F401
@@ -47,6 +58,8 @@ from policy_engine.models import risk_score as risk_score_models  # noqa: F401
 # Import Phase 5 models so they are registered with Base
 from policy_engine.models import fhir_cache as fhir_cache_models  # noqa: F401
 from policy_engine.models import dicom_metadata as dicom_metadata_models  # noqa: F401
+# Clinic-tier models so they are registered with Base
+from policy_engine.models import clinic as clinic_models  # noqa: F401
 from policy_engine.routes.domain_events import DomainEvent  # noqa: F401  — registers table
 
 # Configure logging
@@ -95,7 +108,15 @@ async def lifespan(app: FastAPI):
     )
 
     scheduler = get_scheduler()
-    if mlflow_auto_sync.is_enabled():
+    # Idempotency guard — the scheduler is a module-level singleton, so
+    # any process that re-enters the lifespan (graceful redeploy, hot
+    # reload, pytest TestClient re-entered per test) would otherwise hit
+    # ``scheduler.register()``'s "Job already registered" guard and crash.
+    # Skip the entire registration block when jobs are already present.
+    _already_registered = bool(scheduler.list_jobs())
+    if _already_registered:
+        logger.info("Scheduler already has jobs registered; skipping re-register")
+    if not _already_registered and mlflow_auto_sync.is_enabled():
         scheduler.register(
             name="mlflow_auto_sync",
             interval_seconds=mlflow_auto_sync.sync_interval_seconds(),
@@ -104,27 +125,58 @@ async def lifespan(app: FastAPI):
                 tracking_uri=settings.MLFLOW_TRACKING_URI,
             ),
         )
-    if risk_recompute.is_enabled():
+    if not _already_registered and risk_recompute.is_enabled():
         scheduler.register(
             name="risk_recompute",
             interval_seconds=risk_recompute.recompute_interval_seconds(),
             initial_delay_seconds=120.0,
             func=risk_recompute.make_recompute_job(),
         )
-    if pms_auto_service.is_enabled():
+    if not _already_registered and pms_auto_service.is_enabled():
         scheduler.register(
             name="pms_auto_generate",
             interval_seconds=pms_auto_service.auto_interval_seconds(),
             initial_delay_seconds=180.0,
             func=pms_auto_service.make_auto_generate_job(),
         )
-    if drift_ingestion.is_recompute_enabled():
+    if not _already_registered and drift_ingestion.is_recompute_enabled():
         scheduler.register(
             name="drift_auto_recompute",
             interval_seconds=drift_ingestion.recompute_interval_seconds(),
             initial_delay_seconds=240.0,
             func=drift_ingestion.make_recompute_job(),
         )
+
+    # Clinic-tier monthly compliance PDF generator
+    from policy_engine.services import clinic_pdf_report
+    if not _already_registered and clinic_pdf_report.is_enabled():
+        scheduler.register(
+            name="clinic_monthly_report",
+            interval_seconds=clinic_pdf_report.interval_seconds(),
+            initial_delay_seconds=300.0,
+            func=clinic_pdf_report.make_monthly_report_job(),
+        )
+
+    # Clinic-tier subscription lifecycle (revert canceled subs after grace)
+    from policy_engine.services import subscription_lifecycle
+    if not _already_registered and subscription_lifecycle.is_enabled():
+        scheduler.register(
+            name="clinic_subscription_lifecycle",
+            interval_seconds=subscription_lifecycle.interval_seconds(),
+            initial_delay_seconds=600.0,
+            func=subscription_lifecycle.make_lifecycle_job(),
+        )
+
+    # Clinic-tier retention sweep (GDPR Art. 5(e) storage limitation)
+    from policy_engine.services import clinic_retention
+    if not _already_registered and clinic_retention.is_enabled():
+        scheduler.register(
+            name="clinic_retention_sweep",
+            interval_seconds=clinic_retention.interval_seconds(),
+            initial_delay_seconds=900.0,
+            func=clinic_retention.make_retention_job(),
+        )
+
     scheduler.start()
 
     try:
@@ -189,6 +241,18 @@ app.include_router(regulatory_risk_scores.router, prefix="/v1", tags=["risk-scor
 app.include_router(fhir_routes.router, prefix="/v1", tags=["fhir"])
 app.include_router(dicom_routes.router, prefix="/v1", tags=["dicom"])
 app.include_router(domain_events_routes.router, prefix="/v1", tags=["domain-events"])
+
+# ── Clinic-tier routers ────────────────────────────────────────────────
+app.include_router(clinic_dashboard.router, prefix="/v1/clinic", tags=["clinic-dashboard"])
+app.include_router(clinic_tools.router, prefix="/v1/clinic", tags=["clinic-tools"])
+app.include_router(clinic_onboarding.router, prefix="/v1/clinic", tags=["clinic-onboarding"])
+app.include_router(clinic_reports.router, prefix="/v1/clinic", tags=["clinic-reports"])
+app.include_router(clinic_policy_templates.router, prefix="/v1/clinic", tags=["clinic-policies"])
+app.include_router(clinic_alerts.router, prefix="/v1/clinic", tags=["clinic-alerts"])
+app.include_router(clinic_baa.router, prefix="/v1/clinic", tags=["clinic-baa"])
+app.include_router(clinic_settings.router, prefix="/v1/clinic", tags=["clinic-settings"])
+app.include_router(clinic_shadow_ai.router, prefix="/v1/clinic", tags=["clinic-shadow-ai"])
+app.include_router(billing_clinic.router, prefix="/v1/billing", tags=["billing-clinic"])
 
 
 @app.get("/")
