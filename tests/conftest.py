@@ -326,3 +326,19 @@ __all_tiers__ = (
     TIER_CLINIC_STANDARD,
     TIER_CLINIC_MULTI_SITE,
 )
+
+
+# ── Phase 6: auto-mark legacy phase tests as `regression` ──────────────
+# Saves us from editing 30+ existing test files just to add a module-level
+# pytestmark. Anything in tests/test_phase*.py becomes a regression test.
+
+import re as _re  # noqa: E402
+
+_PHASE_TEST_PATTERN = _re.compile(r"[/\\]tests[/\\]test_phase\d+_")
+
+
+def pytest_collection_modifyitems(config, items):
+    regression = pytest.mark.regression
+    for item in items:
+        if _PHASE_TEST_PATTERN.search(str(item.fspath)):
+            item.add_marker(regression)
