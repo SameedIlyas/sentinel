@@ -20,10 +20,15 @@ MUTATING_METHODS = {"POST", "PUT", "DELETE", "PATCH"}
 
 # Bootstrap endpoints that issue tokens — CSRF cannot apply because
 # the client has no credential yet to derive a token from.
+#
+# Webhook endpoints are also exempt: third-party callers (Stripe,
+# payment processors, etc.) cannot send CSRF tokens. Authenticity is
+# enforced via HMAC signature verification at the route handler.
 EXEMPT_PATHS = (
     "/health",
     "/v1/auth/login",
     "/v1/auth/refresh",
+    "/v1/billing/clinic/webhook",
 )
 
 
