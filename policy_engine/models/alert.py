@@ -1,6 +1,6 @@
 """Alert database model"""
 
-from sqlalchemy import Column, String, DateTime, Boolean, Enum
+from sqlalchemy import Column, String, DateTime, Boolean, Enum, ForeignKey
 from datetime import datetime
 import enum
 
@@ -17,8 +17,13 @@ class AlertSeverity(str, enum.Enum):
 
 class Alert(Base):
     """
-    Alert model representing a security alert
-    
+    Alert model representing a security alert.
+
+    ``organization_id`` MUST be set for every newly-created alert so
+    multi-tenant isolation holds.  Existing rows from before migration 017
+    may have ``organization_id IS NULL`` — clinic-tier reads filter those
+    out, so they remain visible only to enterprise / admin queries.
+
     Attributes:
         id: Unique alert identifier
         timestamp: When the alert was created
@@ -30,9 +35,10 @@ class Alert(Base):
         acknowledged: Whether the alert has been acknowledged
         acknowledged_by: ID of user who acknowledged the alert
         acknowledged_at: When the alert was acknowledged
+        organization_id: Tenant scope — required for HIPAA access control.
     """
     __tablename__ = "alerts"
-    
+
     id = Column(String, primary_key=True, index=True)
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     severity = Column(Enum(AlertSeverity), nullable=False, index=True)
@@ -43,3 +49,9 @@ class Alert(Base):
     acknowledged = Column(Boolean, default=False, nullable=False)
     acknowledged_by = Column(String, nullable=True)
     acknowledged_at = Column(DateTime, nullable=True)
+    organization_id = Column(
+        String,
+        ForeignKey("organizations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )

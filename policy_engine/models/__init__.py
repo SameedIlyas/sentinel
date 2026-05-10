@@ -14,6 +14,16 @@ from policy_engine.models.alert_config import AlertConfig
 from policy_engine.models.api_key import APIKey
 from policy_engine.models.user import User, UserRole
 from policy_engine.models.organization import Organization, OrganizationMember  # noqa: F401
+from policy_engine.models.clinic import (  # noqa: F401
+    ClinicAiTool,
+    ClinicAiObservation,
+    BillingEvent,
+    ClinicReportArtifact,
+    ClinicAiToolStatus,
+    ClinicAiToolRisk,
+    ClinicAiToolCategory,
+    ClinicExtensionToken,
+)
 
 __all__ = [
     "Agent",
@@ -26,4 +36,12 @@ __all__ = [
     "UserRole",
     "Organization",
     "OrganizationMember",
+    "ClinicAiTool",
+    "ClinicAiObservation",
+    "BillingEvent",
+    "ClinicReportArtifact",
+    "ClinicAiToolStatus",
+    "ClinicAiToolRisk",
+    "ClinicAiToolCategory",
+    "ClinicExtensionToken",
 ]

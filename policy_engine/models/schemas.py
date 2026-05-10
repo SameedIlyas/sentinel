@@ -488,7 +488,9 @@ class UserResponse(BaseModel):
     updated_at: datetime
     last_login: Optional[datetime]
     is_active: bool
-    
+    organization_id: Optional[str] = None
+    tier: Optional[str] = None  # populated by /v1/auth/* endpoints
+
     class Config:
         from_attributes = True
 

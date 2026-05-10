@@ -17,3 +17,9 @@ respx>=0.21.0
 pydicom>=2.4.0
 fhir.resources>=7.0.0
 python-dotenv>=1.0.0,<2.0.0
+
+# Billing
+stripe>=8.0.0,<13.0.0
+# WeasyPrint is optional — clinic_pdf_report falls back to HTML output
+# when this and its native deps (cairo / pango / gdk-pixbuf) are absent.
+weasyprint>=60.0; platform_system != "Windows"

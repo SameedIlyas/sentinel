@@ -8,7 +8,11 @@ from datetime import datetime
 
 from policy_engine.database import get_db
 from policy_engine.auth.rbac import get_current_user
-from policy_engine.models.organization import Organization, OrganizationMember
+from policy_engine.models.organization import (
+    Organization,
+    OrganizationMember,
+    ALL_TIERS,
+)
 from policy_engine.models.user import User, UserRole
 from pydantic import BaseModel
 
@@ -41,6 +45,7 @@ class OrganizationResponse(BaseModel):
     name: str
     slug: str
     org_type: str
+    tier: str
     hipaa_baa_signed: bool
     is_active: bool
     created_at: datetime
@@ -48,6 +53,10 @@ class OrganizationResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class TierUpdate(BaseModel):
+    tier: str
 
 
 class MemberAddRequest(BaseModel):
@@ -175,6 +184,53 @@ def delete_organization(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
     db.delete(org)
     db.commit()
+
+
+@router.post("/{org_id}/tier", response_model=OrganizationResponse)
+def set_tier(
+    org_id: str,
+    payload: TierUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Flip an organization's product tier. SYSTEM_ADMIN only.
+
+    This is the single mutation point for the tier flag in v1.  Real
+    billing-driven tier changes flow through ``/v1/billing/clinic/webhook``.
+    Every flip is audited (HIPAA §164.312(b)).
+    """
+    if current_user.role != UserRole.SYSTEM_ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="System admin required to change tier",
+        )
+    if payload.tier not in ALL_TIERS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown tier '{payload.tier}'. Allowed: {list(ALL_TIERS)}",
+        )
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
+    previous_tier = org.tier
+    org.tier = payload.tier
+    org.updated_at = datetime.utcnow()
+    # Audit: tier flips are governance events.  Use the canonical audit
+    # log so a compliance officer can trace which admin changed what.
+    from policy_engine.services.clinic_audit import write_clinic_audit
+    write_clinic_audit(
+        db,
+        user=current_user,
+        org_id=org.id,
+        action="organization.tier.change",
+        system="organizations",
+        data_touched=[org.id],
+        reason="Manual tier change by system admin",
+        metadata={"previous_tier": previous_tier, "new_tier": payload.tier},
+    )
+    db.commit()
+    db.refresh(org)
+    return org
 
 
 @router.post("/{org_id}/members", response_model=MemberResponse, status_code=status.HTTP_201_CREATED)

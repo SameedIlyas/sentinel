@@ -6,6 +6,7 @@ from datetime import datetime
 
 from policy_engine.database import get_db
 from policy_engine.models.user import User
+from policy_engine.models.organization import Organization
 from policy_engine.models.schemas import UserLogin, TokenResponse, UserResponse
 from policy_engine.auth.jwt_utils import (
     verify_password,
@@ -17,6 +18,32 @@ from policy_engine.auth.rbac import get_current_user
 from policy_engine.services.token_blacklist import get_token_blacklist
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional
+
+
+def _build_user_response(user: User, db: Session) -> UserResponse:
+    """Compose UserResponse including the org's product tier."""
+    tier: Optional[str] = None
+    if user.organization_id:
+        org = (
+            db.query(Organization)
+            .filter(Organization.id == user.organization_id)
+            .first()
+        )
+        if org is not None:
+            tier = org.tier or "enterprise"
+    return UserResponse(
+        id=user.id,
+        username=user.username,
+        email=user.email,
+        role=user.role.value,
+        full_name=user.full_name,
+        created_at=user.created_at,
+        updated_at=user.updated_at,
+        last_login=user.last_login,
+        is_active=user.is_active,
+        organization_id=user.organization_id,
+        tier=tier,
+    )
 
 _security = HTTPBearer(auto_error=False)
 
@@ -77,26 +104,16 @@ async def login(
     token_data = {
         "user_id": user.id,
         "username": user.username,
-        "role": user.role.value
+        "role": user.role.value,
+        "org_id": user.organization_id,
     }
     access_token = create_access_token(token_data)
-    
-    # Return token and user info
+
     return TokenResponse(
         access_token=access_token,
         token_type="bearer",
         expires_in=get_token_expiration_time(),
-        user=UserResponse(
-            id=user.id,
-            username=user.username,
-            email=user.email,
-            role=user.role.value,
-            full_name=user.full_name,
-            created_at=user.created_at,
-            updated_at=user.updated_at,
-            last_login=user.last_login,
-            is_active=user.is_active
-        )
+        user=_build_user_response(user, db),
     )
 
 
@@ -142,43 +159,28 @@ async def refresh_token(
     token_data = {
         "user_id": current_user.id,
         "username": current_user.username,
-        "role": current_user.role.value
+        "role": current_user.role.value,
+        "org_id": current_user.organization_id,
     }
     access_token = create_access_token(token_data)
-    
-    # Return new token and user info
+
     return TokenResponse(
         access_token=access_token,
         token_type="bearer",
         expires_in=get_token_expiration_time(),
-        user=UserResponse(
-            id=current_user.id,
-            username=current_user.username,
-            email=current_user.email,
-            role=current_user.role.value,
-            full_name=current_user.full_name,
-            created_at=current_user.created_at,
-            updated_at=current_user.updated_at,
-            last_login=current_user.last_login,
-            is_active=current_user.is_active
-        )
+        user=_build_user_response(current_user, db),
     )
 
 
 @router.get("/validate", response_model=UserResponse)
 async def validate_token(
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """
     Validate current JWT token
-    
-    This endpoint checks if the current token is valid and returns the
-    authenticated user's information.
-    
-    Args:
-        current_user: Current authenticated user
-        
-    Returns:
-        Current user's information
+
+    Returns the authenticated user including their organization tier so the
+    dashboard can render tier-aware navigation without a second round-trip.
     """
-    return current_user
+    return _build_user_response(current_user, db)
