@@ -475,8 +475,14 @@ class TestCSRFProtection:
         """CSRFMiddleware class must exist."""
         from policy_engine.middleware.csrf import CSRFMiddleware  # noqa: F401
 
-    def test_post_without_csrf_token_returns_403_for_jwt_auth(self):
-        """POST without X-CSRF-Token header must return 403 when JWT authenticated."""
+    def test_post_with_bearer_jwt_is_exempt_from_csrf(self):
+        """Bearer JWT requests are exempt from CSRF (browsers don't auto-send
+        Authorization headers cross-origin, so CSRF doesn't apply).
+
+        Pin the contract so a future change to enforce CSRF on Bearer
+        requests surfaces here. See ``policy_engine/middleware/csrf.py``
+        docstring + lines 48-50.
+        """
         from fastapi.testclient import TestClient
         from policy_engine.main import app
         from policy_engine.auth.jwt_utils import create_access_token
@@ -484,14 +490,32 @@ class TestCSRFProtection:
         token = create_access_token({"user_id": "u1", "username": "admin", "role": "admin"})
         client = TestClient(app, raise_server_exceptions=False)
 
-        # Attempt a state-changing request without CSRF token
+        # POST with Bearer JWT, no X-CSRF-Token, no cookie.
+        # CSRF middleware should pass through; what happens after is
+        # auth/route business — anything but 403 satisfies the contract
+        # ("CSRF didn't fire").
         resp = client.post(
             "/v1/auth/logout",
             headers={"Authorization": f"Bearer {token}"},
         )
-        # Must be 403 (CSRF check fails) — not 200 or 404
+        assert resp.status_code != 403, (
+            f"Bearer JWT POST got 403 — CSRF middleware should have skipped "
+            f"this request per its documented contract. Body: {resp.text[:200]}"
+        )
+
+    def test_post_with_cookie_only_returns_403_for_csrf(self):
+        """The actual CSRF gate: cookie-authenticated POST without
+        X-CSRF-Token returns 403."""
+        from fastapi.testclient import TestClient
+        from policy_engine.main import app
+
+        client = TestClient(app, raise_server_exceptions=False)
+        # Set a session cookie (any non-Bearer auth) but no CSRF header.
+        client.cookies.set("session", "fake-session-token")
+        resp = client.post("/v1/auth/logout")
         assert resp.status_code == 403, (
-            f"Expected 403 CSRF rejection, got {resp.status_code}"
+            f"Cookie-auth POST without CSRF token should be 403, got "
+            f"{resp.status_code}"
         )
 
     def test_api_key_requests_exempt_from_csrf(self):
