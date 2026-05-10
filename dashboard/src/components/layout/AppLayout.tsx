@@ -45,8 +45,8 @@ import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
 import { useAuth } from '@/contexts/AuthContext';
 import { useThemeMode } from '@/contexts/ThemeContext';
 import { useUIStore } from '@/stores/uiStore';
-import { getNavForRole } from '@/config/navigation';
-import { UserRole } from '@/types';
+import { getNavForUserAndTier } from '@/config/navigation';
+import { UserRole, TierKey } from '@/types';
 import { WalkthroughOverlay, useWalkthrough } from '@/walkthrough';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import PageErrorBoundary from '@/components/common/PageErrorBoundary';
@@ -116,7 +116,12 @@ const AppLayout: React.FC = () => {
   const currentWidth = isMobile ? 0 : desktopWidth;
   const roleColor = ROLE_COLORS[user?.role ?? ''] ?? theme.palette.text.secondary;
 
-  const navSections = user ? getNavForRole(user.role as UserRole) : [];
+  const navSections = user
+    ? getNavForUserAndTier(
+        user.role as UserRole,
+        ((user.tier as TierKey) ?? 'enterprise') as TierKey,
+      )
+    : [];
 
   const isActive = (path: string) =>
     path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);

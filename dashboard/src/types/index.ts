@@ -13,6 +13,26 @@ export enum UserRole {
   VIEWER = 'viewer',
 }
 
+// ────────────────────────────────────────────────────────────────────
+// Product tier — selects the dashboard persona (hospital vs clinic).
+// "enterprise" preserves the legacy hospital-first experience for every
+// pre-clinic customer.  Three "clinic_*" tiers are SMB SKUs.
+// ────────────────────────────────────────────────────────────────────
+export type TierKey =
+  | 'enterprise'
+  | 'clinic_basic'
+  | 'clinic_standard'
+  | 'clinic_multi_site';
+
+export const CLINIC_TIERS: TierKey[] = [
+  'clinic_basic',
+  'clinic_standard',
+  'clinic_multi_site',
+];
+
+export const isClinicTier = (tier: TierKey | null | undefined): boolean =>
+  tier !== null && tier !== undefined && (CLINIC_TIERS as string[]).includes(tier);
+
 export interface User {
   id: string;
   username: string;
@@ -21,6 +41,7 @@ export interface User {
   full_name?: string;
   is_active: boolean;
   organization_id?: string;
+  tier?: TierKey;
   created_at: string;
   updated_at?: string;
   last_login?: string;

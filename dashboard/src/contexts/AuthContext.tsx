@@ -1,11 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, LoginRequest, UserRole } from '@/types';
+import { User, LoginRequest, UserRole, TierKey } from '@/types';
 import apiClient from '@/api/client';
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  /** Convenience accessor — `user?.tier ?? 'enterprise'`. */
+  tier: TierKey;
   login: (credentials: LoginRequest) => Promise<void>;
   logout: () => Promise<void>;
   hasRole: (roles: UserRole | UserRole[]) => boolean;
@@ -179,8 +181,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return perms?.[resource]?.includes(action) ?? false;
   };
 
+  const tier: TierKey = (user?.tier as TierKey) ?? 'enterprise';
+
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, login, logout, hasRole, hasPermission }}>
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, tier, login, logout, hasRole, hasPermission }}>
       {children}
     </AuthContext.Provider>
   );

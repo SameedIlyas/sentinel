@@ -5,12 +5,13 @@ import {
   type PaletteMode,
 } from '@mui/material';
 import { ThemeModeProvider, useThemeMode } from '@/contexts/ThemeContext';
-import { AuthProvider } from '@/contexts/AuthContext';
+import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import Login from '@/components/auth/Login';
 import AppLayout from '@/components/layout/AppLayout';
 import { UserRole } from '@/types';
 import { WalkthroughProvider } from '@/walkthrough';
+import { I18nProvider } from '@/i18n';
 
 // ── Eager-loaded core pages (above the fold, small bundle impact) ──
 import Dashboard from '@/pages/Dashboard';
@@ -56,6 +57,19 @@ const RiskScoreDetail    = React.lazy(() => import('@/pages/risk/RiskScoreDetail
 const OrganizationSettings = React.lazy(() => import('@/pages/settings/OrganizationSettings'));
 const RiskConfiguration    = React.lazy(() => import('@/pages/settings/RiskConfiguration'));
 const HIPAAConfiguration   = React.lazy(() => import('@/pages/settings/HIPAAConfiguration'));
+
+// Clinic-tier pages
+const ClinicDashboard       = React.lazy(() => import('@/pages/clinic/ClinicDashboard'));
+const ClinicToolList        = React.lazy(() => import('@/pages/clinic/ToolList'));
+const ClinicToolEditor      = React.lazy(() => import('@/pages/clinic/ToolEditor'));
+const ClinicPolicyLibrary   = React.lazy(() => import('@/pages/clinic/PolicyLibrary'));
+const ClinicAlertCenter     = React.lazy(() => import('@/pages/clinic/AlertCenter'));
+const ClinicShadowAi        = React.lazy(() => import('@/pages/clinic/ShadowAiWatcher'));
+const ClinicReports         = React.lazy(() => import('@/pages/clinic/Reports'));
+const ClinicOnboarding      = React.lazy(() => import('@/pages/clinic/OnboardingWizard'));
+const ClinicPracticeSet     = React.lazy(() => import('@/pages/clinic/settings/Practice'));
+const ClinicComplianceSet   = React.lazy(() => import('@/pages/clinic/settings/Compliance'));
+const ClinicBillingSet      = React.lazy(() => import('@/pages/clinic/settings/Billing'));
 
 // ── Design tokens ──────────────────────────────────────────────────
 const ACCENT = { main: '#635bff', light: '#7a73ff', dark: '#5046e5' };
@@ -336,6 +350,12 @@ const PageFallback: React.FC = () => (
   </Box>
 );
 
+// ── i18n bridge — pulls tier from AuthContext into the I18nProvider ─
+const TierAwareI18n: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { tier } = useAuth();
+  return <I18nProvider tier={tier}>{children}</I18nProvider>;
+};
+
 // ── Route tree ─────────────────────────────────────────────────────
 const ThemedApp: React.FC = () => {
   const { mode } = useThemeMode();
@@ -346,6 +366,7 @@ const ThemedApp: React.FC = () => {
       <CssBaseline />
       <BrowserRouter>
         <AuthProvider>
+          <TierAwareI18n>
           <WalkthroughProvider>
             <Suspense fallback={<PageFallback />}>
               <Routes>
@@ -405,6 +426,20 @@ const ThemedApp: React.FC = () => {
                 <Route path="/risk/portfolio"              element={<RiskPortfolio />} />
                 <Route path="/risk/scores/:modelId"        element={<RiskScoreDetail />} />
 
+                {/* ── Clinic-tier surface ── */}
+                <Route path="/clinic"                       element={<ClinicDashboard />} />
+                <Route path="/clinic/onboarding"            element={<ClinicOnboarding />} />
+                <Route path="/clinic/tools"                 element={<ClinicToolList />} />
+                <Route path="/clinic/tools/new"             element={<ClinicToolEditor />} />
+                <Route path="/clinic/tools/:id"             element={<ClinicToolEditor />} />
+                <Route path="/clinic/policies"              element={<ClinicPolicyLibrary />} />
+                <Route path="/clinic/alerts"                element={<ClinicAlertCenter />} />
+                <Route path="/clinic/shadow-ai"             element={<ClinicShadowAi />} />
+                <Route path="/clinic/reports"               element={<ClinicReports />} />
+                <Route path="/clinic/settings/practice"     element={<ClinicPracticeSet />} />
+                <Route path="/clinic/settings/compliance"   element={<ClinicComplianceSet />} />
+                <Route path="/clinic/settings/billing"      element={<ClinicBillingSet />} />
+
                 {/* Settings */}
                 <Route
                   path="/settings/organization"
@@ -436,6 +471,7 @@ const ThemedApp: React.FC = () => {
               </Routes>
             </Suspense>
           </WalkthroughProvider>
+          </TierAwareI18n>
         </AuthProvider>
       </BrowserRouter>
     </ThemeProvider>
