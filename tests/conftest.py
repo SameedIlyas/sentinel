@@ -224,3 +224,105 @@ def authed_client(_db_tables, agent_api_key):
         c.headers.update({"X-API-Key": raw_key})
         yield c, agent_id
     app.dependency_overrides.clear()
+
+
+# ── Clinic-tier fixtures (Phase 1) ──────────────────────────────────────
+# These build on the factories in tests/factories/clinic.py so every
+# fixture writes only PHI-safe synthetic data.
+
+from policy_engine.models.organization import (  # noqa: E402
+    TIER_CLINIC_BASIC,
+    TIER_CLINIC_STANDARD,
+    TIER_CLINIC_MULTI_SITE,
+    TIER_ENTERPRISE,
+)
+
+
+@pytest.fixture(scope="function")
+def clinic_org(db_session):
+    """A clinic_standard Organization with BAA signed.
+
+    Most clinic-route happy-path tests want this. Negative tests requiring
+    enterprise tier or unsigned BAA should call ``make_clinic_org`` from
+    ``tests.factories.clinic`` directly with overrides.
+    """
+    from tests.factories.clinic import make_clinic_org
+    return make_clinic_org(db_session, tier=TIER_CLINIC_STANDARD, baa_signed=True)
+
+
+@pytest.fixture(scope="function")
+def clinic_admin(db_session, clinic_org):
+    """A clinic admin user attached to ``clinic_org``. Returns (user, jwt)."""
+    from tests.factories.clinic import make_clinic_admin
+    return make_clinic_admin(db_session, clinic_org)
+
+
+@pytest.fixture(scope="function")
+def clinic_admin_jwt(clinic_admin):
+    """Just the JWT string for the clinic admin (most tests only want the token)."""
+    _user, token = clinic_admin
+    return token
+
+
+@pytest.fixture(scope="function")
+def clinic_authed_client(_db_tables, db_session, clinic_org, clinic_admin):
+    """TestClient with a clinic-admin JWT pre-injected.
+
+    Yields ``(client, org, user)`` so tests can assert against the
+    underlying records without re-querying.
+    """
+    user, token = clinic_admin
+    app.dependency_overrides[get_db] = _override_get_db
+    with TestClient(app, raise_server_exceptions=True) as c:
+        c.headers.update({"Authorization": f"Bearer {token}"})
+        yield c, clinic_org, user
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture(scope="function")
+def signed_webhook():
+    """Factory fixture — returns ``(body_bytes, signature_header)`` for a Stripe event.
+
+    Usage::
+
+        body, sig = signed_webhook(event_type="customer.subscription.deleted",
+                                   object_data={"customer": "cus_123", ...})
+        client.post("/v1/billing/clinic/webhook", content=body,
+                    headers={"Stripe-Signature": sig})
+    """
+    import os
+    from tests.factories.billing import make_stripe_event, serialize_and_sign
+
+    def _build(
+        event_type: str,
+        *,
+        object_data: dict | None = None,
+        event_id: str | None = None,
+        secret: str | None = None,
+        timestamp: int | None = None,
+    ):
+        evt = make_stripe_event(event_type, object_data=object_data, event_id=event_id)
+        s = secret if secret is not None else os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+        return serialize_and_sign(evt, secret=s, timestamp=timestamp)
+
+    return _build
+
+
+@pytest.fixture(scope="function")
+def make_clinic_org_factory(db_session):
+    """Curried factory for tests that need multiple orgs (cap-breach, multi-tenant)."""
+    from tests.factories.clinic import make_clinic_org
+
+    def _factory(**kwargs):
+        return make_clinic_org(db_session, **kwargs)
+
+    return _factory
+
+
+# Re-export tier constants for convenience in test files.
+__all_tiers__ = (
+    TIER_ENTERPRISE,
+    TIER_CLINIC_BASIC,
+    TIER_CLINIC_STANDARD,
+    TIER_CLINIC_MULTI_SITE,
+)

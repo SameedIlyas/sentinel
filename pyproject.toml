@@ -42,6 +42,26 @@ dev = [
     "mypy>=1.5.0",
     "isort>=5.12.0",
 ]
+test = [
+    # Reuses ``dev`` essentials; add testing-only libraries here so the
+    # production wheel stays lean. Install with ``pip install -e .[test]``.
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "pytest-randomly>=3.15",
+    "freezegun>=1.4",
+    "respx>=0.21",
+    "stripe>=8.0",
+    "anthropic>=0.39",
+    "fakeredis>=2.21",
+    "python-dotenv>=1.0",
+    "diff-cover>=9.0",
+    "pdfplumber>=0.10",
+    # presidio is gated by python>=3.10 (drops 3.8/3.9 wheels). The PHI
+    # meta-scan in Phase 7 imports it conditionally.
+    "presidio-analyzer>=2.2; python_version>='3.10'",
+    "presidio-anonymizer>=2.2; python_version>='3.10'",
+]
 
 [project.urls]
 Homepage = "https://sentinel.ai"
@@ -89,4 +109,12 @@ filterwarnings = [
     "ignore::DeprecationWarning:pydantic.*",
     "ignore::DeprecationWarning:passlib.*",
     "ignore::PendingDeprecationWarning",
+]
+markers = [
+    "clinic: clinic-tier route + service tests",
+    "billing: billing + Stripe webhook tests",
+    "sdk: SDK harness tests (Anthropic, internal Sentinel SDK)",
+    "agent: synthetic clinic-admin agent scenarios",
+    "regression: full-system regression sweep (phase0..phase7 + clinic)",
+    "slow: tests > 1 second; gated in fast CI lane",
 ]
