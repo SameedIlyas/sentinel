@@ -20,14 +20,16 @@ populates as work lands.
 
 | # | Phase | Status | Tests | Commit |
 |---|---|---|---|---|
-| 0 | Blueprint plan committed | ✅ done | — | `docs(plan): blueprint for clinic-tier test suite` |
+| 0 | Blueprint plan committed | ✅ done | — | `docs(plan): blueprint` |
 | 1 | Foundation & fixtures | ✅ done | 8 smoke | `test(infra): scaffold clinic-tier test foundation` |
 | 2 | Backend unit + integration (clinic) | ✅ done | 137 | `test(clinic): unit + integration tests` |
 | 3 | Billing + Stripe webhook | ✅ done | 41 | `test(billing): Stripe webhook signature, idempotency, PII redaction` |
-| 4 | SDK harness + synthetic agent | ⏳ pending | — | — |
-| 5 | Frontend + Playwright E2E | ⏳ pending | — | — |
-| 6 | Extension smoke + regression sweep | ⏳ pending | — | — |
-| 7 | CI, coverage gate, compliance audit | ⏳ pending | — | — |
+| 4 | SDK harness + synthetic agent | ✅ done | 9 | `test(sdk,agent): SDK harness + deterministic clinic-admin agent` |
+| 5 | Frontend + Playwright E2E | ⏸️ deferred | — | See `dashboard/tests/e2e/README.md` |
+| 6 | Extension smoke + regression sweep | ✅ done | 6 + 487 auto-tagged | `test(extension,regression): manifest hygiene + regression auto-mark` |
+| 7 | CI, coverage gate, compliance audit | ✅ done | — | `ci: GH Actions + bandit + diff-cover + PHI meta-scan` |
+
+**Aggregate:** 201 new tests + 487 legacy tests auto-marked `regression` for the CI sweep.
 
 ## Production bugs surfaced by the test suite
 
@@ -38,12 +40,15 @@ populates as work lands.
 | P-BUG-3 | CRITICAL | `policy_engine/middleware/csrf.py` did not exempt the Stripe webhook path. Stripe servers cannot send CSRF tokens, so every webhook returned 403 in production — billing was silently broken. | ✅ **Fixed** in `fix(security): exempt /v1/billing/clinic/webhook from CSRF middleware` |
 | Factory | LOW | Existing `tests/conftest.py::admin_user_jwt` fixture uses `"sub"` payload key; production `routes/auth.py:105` and `get_current_user` use `"user_id"`. The fixture is silently broken (any test using it against a real route returns 401). My factories use `"user_id"` to match production. | **Surfaced; not fixed** |
 
-## Phase 1-3 deferrals (track as Phase 7 follow-up issues)
+## Deferrals — open as follow-up issues
 
-- `test_routes_settings.py`, `test_routes_policy_templates.py`, `test_routes_alerts.py`, `test_routes_dashboard.py`, `test_routes_shadow_ai.py`, `test_routes_reports.py` — placeholder `__init__.py` only
-- `test_clinic_pdf_report.py` — needs WeasyPrint optional dep + pdfplumber-based PDF text scrubbing
-- Migration tests — needs testcontainers-postgres in CI
-- Phases 4-7 entirely
+- **Phase 5 (UI E2E)** — see `dashboard/tests/e2e/README.md`. Needs file-backed sqlite + uvicorn child process topology; best done in a clean session.
+- `test_routes_settings.py`, `test_routes_policy_templates.py`, `test_routes_alerts.py`, `test_routes_dashboard.py`, `test_routes_shadow_ai.py`, `test_routes_reports.py` — covered transitively by `test_clinic_admin_agent.py` happy-path scenario; dedicated route files would close per-file coverage.
+- `test_clinic_pdf_report.py` — needs WeasyPrint optional dep + `pdfplumber` PDF text scrubbing.
+- Migration tests — needs testcontainers-postgres in CI.
+- **P-BUG-1** — production fix in `policy_engine/main.py` lifespan (idempotent scheduler register).
+- **P-BUG-2** — pre-existing CSRF test failure in user's working tree.
+- spaCy model in CI — currently `en_core_web_sm`. Upgrade to `en_core_web_lg` for the meta-scan when CI install budget allows.
 
 ## How to run
 
@@ -57,13 +62,21 @@ pytest tests/billing -v
 # SDK + synthetic agent
 pytest tests/sdk_harness tests/agent -v
 
-# Full regression
+# Extension manifest hygiene
+pytest tests/test_extension_manifest.py -v
+
+# Full regression sweep (existing phase0..phase7 backend suite, auto-marked)
 pytest -m regression
+
+# Independent PHI meta-scan (CI sets PHI_META_SCAN_ENABLED=1)
+PHI_META_SCAN_ENABLED=1 pytest tests/test_phi_scan_meta.py
 
 # Coverage report (per-file gate via diff-cover)
 pytest --cov=policy_engine --cov-report=xml:coverage.xml
 diff-cover coverage.xml --compare-branch=07572e9 --fail-under=80
 ```
+
+CI runs all of the above plus `bandit -r <clinic surface> -ll` and a regex sweep for accidentally-committed secrets. See `.github/workflows/test.yml`.
 
 ## Known constraints
 

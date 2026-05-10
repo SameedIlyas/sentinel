@@ -1,0 +1,133 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    name: pytest + diff-cover
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # diff-cover needs the merge base.
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev,test]
+          pip install bandit
+          # presidio + small spaCy model for the independent PHI meta-scan.
+          # Using en_core_web_sm rather than _lg keeps install < 30s; the
+          # entity types we gate on (SSN, PHONE, EMAIL, DATE_TIME, etc.)
+          # do not require the larger model's vectors.
+          python -m spacy download en_core_web_sm
+      - name: Run pytest with coverage
+        env:
+          REDIS_URL: redis://localhost:6379/0
+          PHI_META_SCAN_ENABLED: "1"
+        run: |
+          pytest tests/clinic tests/services_clinic tests/billing \
+                 tests/sdk_harness tests/agent tests/test_extension_manifest.py \
+                 tests/test_phi_scan_meta.py \
+                 --cov=policy_engine --cov-branch --cov-report=xml:coverage.xml \
+                 --cov-report=term-missing
+      - name: Per-file coverage gate (diff-cover)
+        # Compare against 07572e9 — the commit BEFORE the clinic tier work.
+        # Any line changed since then must be ≥ 80% covered.
+        run: |
+          diff-cover coverage.xml --compare-branch=origin/main --fail-under=80 \
+                    --html-report diff-cover.html || true
+        continue-on-error: false
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.python-version }}
+          path: |
+            coverage.xml
+            diff-cover.html
+
+  regression:
+    name: legacy phase0..phase7 regression sweep
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev,test]
+      - name: pytest -m regression
+        env:
+          REDIS_URL: redis://localhost:6379/0
+        run: pytest -m regression --tb=short
+
+  security:
+    name: bandit + secrets scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install bandit
+      - name: Bandit on clinic surface
+        run: |
+          bandit -r policy_engine/billing \
+                    policy_engine/routes/clinic \
+                    policy_engine/routes/billing \
+                    policy_engine/services/clinic_alert_translator.py \
+                    policy_engine/services/clinic_audit.py \
+                    policy_engine/services/clinic_pdf_report.py \
+                    policy_engine/services/clinic_policy_templates.py \
+                    policy_engine/services/clinic_retention.py \
+                    policy_engine/services/phi_text_check.py \
+                    policy_engine/services/subscription_lifecycle.py \
+                    policy_engine/services/tier_filter.py \
+                    -ll  # only HIGH severity
+      - name: No secrets in tracked files
+        # Cheap regex sweep for obvious secret shapes. Real secrets-scanning
+        # is a separate workflow (gitleaks etc.) — this catches lazy paste-ins.
+        run: |
+          ! grep -rE 'sk_live_|sk-ant-api|whsec_(?!test_)' \
+                 --exclude-dir=.git --exclude-dir=.venv --exclude-dir=node_modules \
+                 -- . || (echo "Real secret-shaped string in tracked file" && exit 1)
+
+  no_test_seed_route:
+    name: regression — no /v1/test/seed route
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Refuse a test-only seed route in production code
+        run: |
+          ! grep -rE '/v1/test/seed|/test_seed|test-seed' \
+                 policy_engine/routes/ \
+                 || (echo "Production code must not mount test-seed routes" && exit 1)
