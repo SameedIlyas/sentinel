@@ -46,7 +46,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useThemeMode } from '@/contexts/ThemeContext';
 import { useUIStore } from '@/stores/uiStore';
 import { getNavForUserAndTier } from '@/config/navigation';
-import { UserRole, TierKey } from '@/types';
+import { UserRole, resolveTier } from '@/types';
 import { WalkthroughOverlay, useWalkthrough } from '@/walkthrough';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import PageErrorBoundary from '@/components/common/PageErrorBoundary';
@@ -119,7 +119,7 @@ const AppLayout: React.FC = () => {
   const navSections = user
     ? getNavForUserAndTier(
         user.role as UserRole,
-        ((user.tier as TierKey) ?? 'enterprise') as TierKey,
+        resolveTier(user.tier),
       )
     : [];
 
