@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 import logging
+import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -287,15 +288,23 @@ async def check_policy(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Policy evaluation error: {str(e)}", exc_info=True)
-        
-        # Fail-safe: block on error
+        # Generate a stable correlation id so operators can match the response
+        # back to the server-side log without leaking str(e) over the wire.
+        error_id = uuid.uuid4().hex[:12]
+        logger.error(
+            f"Policy evaluation error [error_id={error_id}]: {str(e)}",
+            exc_info=True,
+        )
+
+        # Fail-safe: block on error. Reason and metadata MUST NOT contain the
+        # raw exception string — it can carry DB connection details, ORM
+        # column names, file paths, or other internal reconnaissance.
         error_response = PolicyCheckResponse(
             decision='block',
-            reason=f"Policy evaluation failed: {str(e)}. Blocking for safety.",
+            reason="Internal error during policy evaluation. Action blocked for safety.",
             masked_data=None,
             policy_ids=[],
-            metadata={'error': str(e), 'fail_safe': True}
+            metadata={'error_id': error_id, 'fail_safe': True}
         )
         
         # Log the error response
