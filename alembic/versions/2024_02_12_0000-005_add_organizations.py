@@ -57,5 +57,14 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Drop indexes explicitly so a re-run after a partial rollback (e.g. an
+    # earlier drop_table held by an FK from another table) does not leave
+    # orphaned indexes that block a subsequent upgrade. if_exists=True keeps
+    # this idempotent on SQLite as well as PostgreSQL.
+    op.drop_index('ix_organization_members_user_id', table_name='organization_members', if_exists=True)
+    op.drop_index('ix_organization_members_org_id', table_name='organization_members', if_exists=True)
+    op.drop_index('ix_organization_members_id', table_name='organization_members', if_exists=True)
+    op.drop_index('ix_organizations_slug', table_name='organizations', if_exists=True)
+    op.drop_index('ix_organizations_id', table_name='organizations', if_exists=True)
     op.drop_table('organization_members')
     op.drop_table('organizations')
