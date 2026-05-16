@@ -91,8 +91,19 @@ class ApiClient {
   }
 
   private getUser(): User | null {
+    // HIGH-025 — A corrupt localStorage entry (browser quota error, manual
+    // edit, third-party-extension interference) used to throw SyntaxError
+    // through every caller and silently log the user out with no error.
+    // Clear the bad entry and return null so the caller routes cleanly to
+    // the login flow on the next render.
     const userStr = localStorage.getItem('user');
-    return userStr ? JSON.parse(userStr) : null;
+    if (!userStr) return null;
+    try {
+      return JSON.parse(userStr) as User;
+    } catch {
+      this.clearUser();
+      return null;
+    }
   }
 
   private setUser(user: User): void {
