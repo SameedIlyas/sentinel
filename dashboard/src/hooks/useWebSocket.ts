@@ -36,6 +36,21 @@ export const useWebSocket = (url: string, options: UseWebSocketOptions = {}) => 
   const reconnectCountRef = useRef(0);
   const reconnectTimeoutRef = useRef<number | null>(null);
 
+  // HIGH-027 — store callbacks in refs and read from them inside the static
+  // handler closures so connect()'s identity does NOT depend on caller
+  // callback identity. Parent re-renders that hand us a new onMessage no
+  // longer tear down and re-open the socket.
+  const onMessageRef = useRef(onMessage);
+  const onErrorRef = useRef(onError);
+  const onOpenRef = useRef(onOpen);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onMessageRef.current = onMessage;
+    onErrorRef.current = onError;
+    onOpenRef.current = onOpen;
+    onCloseRef.current = onClose;
+  }, [onMessage, onError, onOpen, onClose]);
+
   const connect = useCallback(() => {
     try {
       // Close existing connection if any
@@ -50,14 +65,14 @@ export const useWebSocket = (url: string, options: UseWebSocketOptions = {}) => 
         console.log('WebSocket connected:', url);
         setIsConnected(true);
         reconnectCountRef.current = 0;
-        if (onOpen) onOpen(event);
+        if (onOpenRef.current) onOpenRef.current(event);
       };
 
       ws.onmessage = (event) => {
         try {
           const message: WebSocketMessage = JSON.parse(event.data);
           setLastMessage(message);
-          if (onMessage) onMessage(message);
+          if (onMessageRef.current) onMessageRef.current(message);
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);
         }
@@ -65,14 +80,14 @@ export const useWebSocket = (url: string, options: UseWebSocketOptions = {}) => 
 
       ws.onerror = (event) => {
         console.error('WebSocket error:', event);
-        if (onError) onError(event);
+        if (onErrorRef.current) onErrorRef.current(event);
       };
 
       ws.onclose = (event) => {
         console.log('WebSocket closed:', event.code, event.reason);
         setIsConnected(false);
         wsRef.current = null;
-        if (onClose) onClose(event);
+        if (onCloseRef.current) onCloseRef.current(event);
 
         // Attempt to reconnect
         if (reconnectCountRef.current < reconnectAttempts) {
@@ -90,7 +105,7 @@ export const useWebSocket = (url: string, options: UseWebSocketOptions = {}) => 
     } catch (error) {
       console.error('Error creating WebSocket connection:', error);
     }
-  }, [url, onMessage, onError, onOpen, onClose, reconnectInterval, reconnectAttempts]);
+  }, [url, reconnectInterval, reconnectAttempts]);
 
   const disconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
