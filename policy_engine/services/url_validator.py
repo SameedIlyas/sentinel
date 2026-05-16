@@ -19,7 +19,12 @@ PRIVATE_RANGES: List[ipaddress.IPv4Network] = [
 ]
 
 PRIVATE_IPV6: List[ipaddress.IPv6Network] = [
-    ipaddress.IPv6Network("::1/128"),
+    ipaddress.IPv6Network("::1/128"),       # Loopback
+    ipaddress.IPv6Network("fc00::/7"),      # Unique Local Addresses (RFC 4193)
+    ipaddress.IPv6Network("fe80::/10"),     # Link-local (RFC 4291)
+    ipaddress.IPv6Network("::ffff:0:0/96"), # IPv4-mapped IPv6 (covers all RFC 1918 + IMDS)
+    ipaddress.IPv6Network("64:ff9b::/96"),  # NAT64 (RFC 6052)
+    ipaddress.IPv6Network("100::/64"),      # Discard prefix (RFC 6666)
 ]
 
 ALLOWED_PORTS = {80, 443}
@@ -54,6 +59,8 @@ def _is_private_ip(addr: str) -> bool:
         if isinstance(ip, ipaddress.IPv4Address):
             return any(ip in net for net in PRIVATE_RANGES)
         if isinstance(ip, ipaddress.IPv6Address):
+            if ip.is_multicast:
+                return True
             return any(ip in net for net in PRIVATE_IPV6)
     except ValueError:
         pass
