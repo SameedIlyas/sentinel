@@ -57,15 +57,24 @@ def _check_admin_only_verified(
 
     Uses Pydantic ``ValidationInfo.context`` rather than a global so the
     rule is enforced at the schema boundary, before any DB write.
-    Falls open (passes through) when no ``current_user`` is supplied in
-    context — the route layer is responsible for actually calling
-    ``model_validate(payload, context={...})``.
+
+    Fail-closed semantics (review CRITICAL #1): when the target value is
+    ``VERIFIED`` and the caller has not supplied a ``current_user`` in
+    ``info.context``, this validator raises rather than passing through.
+    Without this guard, any test/seed/background-task that constructs
+    ``ToolCreate(practice_opt_out_state='verified')`` directly (i.e. not
+    through ``model_validate(..., context={'current_user': ...})``) would
+    silently write an unverified VERIFIED row. Non-VERIFIED values are
+    still allowed to pass through without context so trivial constructs
+    like ``ToolCreate(name='X')`` continue to work.
     """
     if value != ClinicAiToolPracticeOptOutState.VERIFIED:
         return value
     user = (info.context or {}).get("current_user") if info.context else None
     if user is None:
-        return value
+        raise ValueError(
+            "opt_out_verified state requires current_user context (admin-only)"
+        )
     role = getattr(user, "role", None)
     role_value = getattr(role, "value", role)
     if role_value not in _ADMIN_ROLES:

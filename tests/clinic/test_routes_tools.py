@@ -382,6 +382,42 @@ def test_alert_emitted_once_in_30d_window(clinic_authed_client, db_session) -> N
     assert n_after_flip == 1
 
 
+def test_validator_blocks_verified_without_context() -> None:
+    """Review CRITICAL #1 — validator fail-closed on missing context.
+
+    Constructing ``ToolCreate(practice_opt_out_state=VERIFIED)`` directly
+    (without ``model_validate(..., context={'current_user': ...})``) must
+    raise so that no test/seed/background-task can silently write an
+    unverified VERIFIED row.
+    """
+    from pydantic import ValidationError
+
+    from policy_engine.models.clinic import ClinicAiToolPracticeOptOutState
+    from policy_engine.routes.clinic.tools import ToolCreate, ToolUpdate
+
+    with pytest.raises(ValidationError) as exc_info:
+        ToolCreate(
+            name="X",
+            practice_opt_out_state=ClinicAiToolPracticeOptOutState.VERIFIED,
+        )
+    msg = str(exc_info.value)
+    assert "admin" in msg.lower(), msg
+
+    # Same guard on ToolUpdate.
+    with pytest.raises(ValidationError) as exc_info:
+        ToolUpdate(
+            practice_opt_out_state=ClinicAiToolPracticeOptOutState.VERIFIED,
+        )
+    assert "admin" in str(exc_info.value).lower()
+
+    # Non-VERIFIED values still construct cleanly with no context — the
+    # trivial-construct path must keep working.
+    ok = ToolCreate(name="Y")
+    assert ok.practice_opt_out_state == (
+        ClinicAiToolPracticeOptOutState.NOT_APPLICABLE
+    )
+
+
 def test_alert_emitted_after_window(clinic_authed_client, db_session) -> None:
     """After the 30-day window elapses, the same tool may re-alert once."""
     from datetime import datetime, timedelta
