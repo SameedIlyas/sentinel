@@ -227,3 +227,208 @@ def test_create_tool_writes_audit_log(clinic_authed_client, db_session) -> None:
     assert log.tool_name == "clinic.tool.create"
     assert log.user_id == user.id
     assert log.organization_id == org.id
+
+
+# ── PRD.v2.md §6.8.2 — model training status fields ────────────────────
+
+
+def test_enums_exposed() -> None:
+    """Schemas expose ClinicAiToolModelTrainingStatus + PracticeOptOutState."""
+    from policy_engine.models.clinic import (
+        ClinicAiToolModelTrainingStatus,
+        ClinicAiToolPracticeOptOutState,
+    )
+
+    assert set(s.value for s in ClinicAiToolModelTrainingStatus) == {
+        "unknown",
+        "no_training",
+        "trains_on_customer_data",
+        "opt_out_available",
+    }
+    assert set(s.value for s in ClinicAiToolPracticeOptOutState) == {
+        "not_applicable",
+        "required_not_set",
+        "required_and_set",
+        "verified",
+    }
+
+
+def test_create_with_training_status_201(clinic_authed_client) -> None:
+    client, _org, _user = clinic_authed_client
+    payload = {
+        "name": "ChatGPT (free)",
+        "vendor": "OpenAI",
+        "model_training_status": "trains_on_customer_data",
+        "practice_opt_out_state": "not_applicable",
+    }
+    resp = client.post("/v1/clinic/tools", json=payload)
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["model_training_status"] == "trains_on_customer_data"
+    assert body["practice_opt_out_state"] == "not_applicable"
+    assert body["opt_out_verified_at"] is None
+    assert body["opt_out_verified_by_user_id"] is None
+
+
+def test_staff_cannot_mark_verified(
+    db_session, make_clinic_org_factory
+) -> None:
+    """HEALTH-5 / PRD.v2.md §6.8.2.a — only Admin may set 'verified'."""
+    from fastapi.testclient import TestClient
+    from policy_engine.database import get_db
+    from policy_engine.main import app
+    from policy_engine.models.user import UserRole
+    from tests.factories.clinic import make_clinic_admin
+
+    org = make_clinic_org_factory()
+    # Make a non-admin (compliance_officer) user.
+    _user, jwt = make_clinic_admin(
+        db_session, org, role=UserRole.COMPLIANCE_OFFICER, username="staff_user"
+    )
+
+    app.dependency_overrides[get_db] = lambda: db_session
+    try:
+        c = TestClient(app, raise_server_exceptions=True)
+        c.headers.update({"Authorization": f"Bearer {jwt}"})
+        resp = c.post(
+            "/v1/clinic/tools",
+            json={
+                "name": "Some Tool",
+                "model_training_status": "opt_out_available",
+                "practice_opt_out_state": "verified",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert resp.status_code == 422, resp.text
+    assert "Admin" in resp.text or "verified" in resp.text
+
+
+def test_admin_marks_verified_stamps_provenance(
+    clinic_authed_client, db_session
+) -> None:
+    """PRD.v2.md §6.8.2.a — Admin-set verified must stamp provenance."""
+    from policy_engine.models.clinic import ClinicAiTool
+
+    client, _org, user = clinic_authed_client
+    create = client.post(
+        "/v1/clinic/tools",
+        json={
+            "name": "Audited Verified Tool",
+            "model_training_status": "opt_out_available",
+            "practice_opt_out_state": "required_and_set",
+        },
+    )
+    assert create.status_code == 201
+    tool_id = create.json()["id"]
+    upd = client.put(
+        f"/v1/clinic/tools/{tool_id}",
+        json={"practice_opt_out_state": "verified"},
+    )
+    assert upd.status_code == 200, upd.text
+    body = upd.json()
+    assert body["practice_opt_out_state"] == "verified"
+    assert body["opt_out_verified_at"] is not None
+    assert body["opt_out_verified_by_user_id"] == user.id
+    row = (
+        db_session.query(ClinicAiTool).filter(ClinicAiTool.id == tool_id).first()
+    )
+    assert row.opt_out_verified_by_user_id == user.id
+
+
+def test_alert_emitted_once_in_30d_window(clinic_authed_client, db_session) -> None:
+    """PRD.v2.md §6.8.2.c — flipping back and forth within 30d emits once."""
+    from policy_engine.models.alert import Alert
+
+    client, org, _user = clinic_authed_client
+    # 1) Create with trains_on_customer_data → one alert.
+    resp1 = client.post(
+        "/v1/clinic/tools",
+        json={
+            "name": "Bouncer Tool",
+            "model_training_status": "trains_on_customer_data",
+        },
+    )
+    assert resp1.status_code == 201
+    tool_id = resp1.json()["id"]
+    n_after_create = (
+        db_session.query(Alert)
+        .filter(
+            Alert.organization_id == org.id,
+            Alert.alert_type == "clinic.tool.trains_on_data",
+            Alert.agent_id == tool_id,
+        )
+        .count()
+    )
+    assert n_after_create == 1
+    # 2) Flip to no_training, then back to trains_on_customer_data — still 1.
+    client.put(
+        f"/v1/clinic/tools/{tool_id}",
+        json={"model_training_status": "no_training"},
+    )
+    client.put(
+        f"/v1/clinic/tools/{tool_id}",
+        json={"model_training_status": "trains_on_customer_data"},
+    )
+    n_after_flip = (
+        db_session.query(Alert)
+        .filter(
+            Alert.organization_id == org.id,
+            Alert.alert_type == "clinic.tool.trains_on_data",
+            Alert.agent_id == tool_id,
+        )
+        .count()
+    )
+    assert n_after_flip == 1
+
+
+def test_alert_emitted_after_window(clinic_authed_client, db_session) -> None:
+    """After the 30-day window elapses, the same tool may re-alert once."""
+    from datetime import datetime, timedelta
+
+    from policy_engine.models.alert import Alert
+
+    client, org, _user = clinic_authed_client
+    resp1 = client.post(
+        "/v1/clinic/tools",
+        json={
+            "name": "Window Tool",
+            "model_training_status": "trains_on_customer_data",
+        },
+    )
+    assert resp1.status_code == 201
+    tool_id = resp1.json()["id"]
+    # Backdate the existing alert beyond the 30-day window.
+    older = datetime.utcnow() - timedelta(days=31)
+    alert = (
+        db_session.query(Alert)
+        .filter(
+            Alert.organization_id == org.id,
+            Alert.alert_type == "clinic.tool.trains_on_data",
+            Alert.agent_id == tool_id,
+        )
+        .first()
+    )
+    assert alert is not None
+    alert.timestamp = older
+    db_session.commit()
+    # Now flip to no_training and back; a fresh alert is allowed.
+    client.put(
+        f"/v1/clinic/tools/{tool_id}",
+        json={"model_training_status": "no_training"},
+    )
+    client.put(
+        f"/v1/clinic/tools/{tool_id}",
+        json={"model_training_status": "trains_on_customer_data"},
+    )
+    fresh = (
+        db_session.query(Alert)
+        .filter(
+            Alert.organization_id == org.id,
+            Alert.alert_type == "clinic.tool.trains_on_data",
+            Alert.agent_id == tool_id,
+            Alert.timestamp > older,
+        )
+        .count()
+    )
+    assert fresh == 1
