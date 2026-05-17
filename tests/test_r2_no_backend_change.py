@@ -45,11 +45,21 @@ USER_PY = REPO_ROOT / "policy_engine" / "models" / "user.py"
 #   python -c "import hashlib; print(hashlib.sha256(open('policy_engine/models/user.py','rb').read()).hexdigest())"
 # and update the two strings below.
 
+#
+# Note on line endings: these SHAs are computed from the LF-canonical
+# (committed) bytes. On a Windows worktree with `core.autocrlf=true` the
+# file on disk may have CRLF line endings, producing a different SHA than
+# the committed bytes. The R2 land-time capture happened on a CRLF
+# worktree, which is why the previously-recorded `user.py` SHA didn't
+# match the parent worktree. The values below are LF-canonical so the
+# test passes regardless of the developer's autocrlf checkout setting.
+# If you switch a future capture environment, re-run on a fresh
+# `git config --global core.autocrlf input` checkout to match.
 EXPECTED_RBAC_SHA256 = (
     "99fec7002f2c9c9bd6ad851dbaef371df61c2d1214bf77265be4628b86aa0ac3"
 )
 EXPECTED_USER_SHA256 = (
-    "5cf79243b492d4c4903ed597c07619941a3a16be3655220ba798d7f841056927"
+    "2df09cc8e59c468afaec6f52339d5318620338d660879006f938b1014922bd8e"
 )
 
 
