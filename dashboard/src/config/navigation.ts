@@ -1,4 +1,10 @@
 import { UserRole, TierKey, isClinicTier } from '@/types';
+import {
+  ClinicProductRole,
+  ProductRole,
+  getClinicProductRole,
+  isClinicProductRole,
+} from '@/auth/clinicProductRole';
 
 export interface NavItem {
   label: string;
@@ -14,6 +20,10 @@ export interface NavSection {
   section: string;
   items: NavItem[];
   allowedRoles?: UserRole[];   // section hidden if user lacks any allowed role
+  /** R2 — gate by projected product role on clinic tiers. Ignored on
+   *  enterprise (where the projection is identity and product roles
+   *  never include 'admin' | 'staff'). */
+  allowedProductRoles?: ClinicProductRole[];
   /** If set, the section is shown only when the user's tier is in the list. */
   requiredTiers?: TierKey[];
 }
@@ -57,7 +67,11 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     section: 'Practice Settings',
     requiredTiers: CLINIC_ALL_TIERS,
-    allowedRoles: [UserRole.SYSTEM_ADMIN, UserRole.ADMIN, UserRole.COMPLIANCE_OFFICER],
+    // R2: on clinic tiers, only the projected 'admin' product role sees
+    // Practice Settings. Server-side every authenticated user reaches the
+    // /clinic/settings/* routes (see plans/clinical-shield-v1/R2-PLAN.md
+    // access matrix). Hiding the link is presentation-only.
+    allowedProductRoles: ['admin'],
     items: [
       { label: 'Practice info', path: '/clinic/settings/practice',    iconName: 'Business' },
       { label: 'Compliance',    path: '/clinic/settings/compliance',  iconName: 'HealthAndSafety' },
@@ -212,13 +226,28 @@ function tierAllowed(allowed: TierKey[] | undefined, tier: TierKey): boolean {
 /**
  * Tier + role-aware navigation filter.  Use this from `AppLayout`.
  *
+ * `productRole` defaults to `getClinicProductRole(role, tier)` so callers
+ * that have not yet migrated to passing the projected role still get
+ * correct clinic-tier filtering. Pass an explicit `productRole` to override
+ * the projection (used by tests; potentially useful for "preview as
+ * staff" affordances later).
+ *
  * The legacy `getNavForRole` is preserved below for callers that have
  * not yet migrated; it implicitly treats the user as enterprise.
  */
-export function getNavForUserAndTier(role: UserRole, tier: TierKey): NavSection[] {
+export function getNavForUserAndTier(
+  role: UserRole,
+  tier: TierKey,
+  productRole: ProductRole = getClinicProductRole(role, tier),
+): NavSection[] {
   return NAV_SECTIONS
     .filter((sec) => tierAllowed(sec.requiredTiers, tier))
     .filter((sec) => !sec.allowedRoles || sec.allowedRoles.includes(role))
+    .filter((sec) =>
+      !sec.allowedProductRoles ||
+      (isClinicProductRole(productRole) &&
+        sec.allowedProductRoles.includes(productRole)),
+    )
     .map((sec) => ({
       ...sec,
       items: sec.items

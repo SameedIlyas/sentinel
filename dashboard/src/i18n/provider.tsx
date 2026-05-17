@@ -1,6 +1,6 @@
 import React, { createContext, ReactNode, useContext, useMemo } from 'react';
 import type { TierKey } from '@/types';
-import { resolveDict, enterprise } from './dict';
+import { resolveDict, resolveDictLocale, enterprise } from './dict';
 import type { TierDict } from './dict/types';
 
 interface I18nContextValue {
@@ -27,17 +27,35 @@ function makeT(dict: TierDict): I18nContextValue['t'] {
   };
 }
 
+/** Detect the browser locale once at module load. SSR-safe: returns
+ *  undefined when `navigator` is unavailable so callers fall back to en. */
+function detectBrowserLocale(): string | undefined {
+  if (typeof navigator === 'undefined') return undefined;
+  return navigator.language || undefined;
+}
+
 interface ProviderProps {
   tier: TierKey | null | undefined;
+  /** Optional override for tests / locale switchers. Defaults to
+   *  `navigator.language` at render time. */
+  locale?: string;
   children: ReactNode;
 }
 
-export const I18nProvider: React.FC<ProviderProps> = ({ tier, children }) => {
+export const I18nProvider: React.FC<ProviderProps> = ({ tier, locale, children }) => {
   const resolvedTier: TierKey = tier ?? 'enterprise';
+  const effectiveLocale = locale ?? detectBrowserLocale();
   const value = useMemo<I18nContextValue>(() => {
-    const dict = { ...enterprise, ...resolveDict(resolvedTier) };
+    // R2 + HEALTH-2 — locale-aware resolver merges the Spanish overlay
+    // on top of the English tier dict when the browser locale starts
+    // with 'es'. On enterprise tier (no overlay yet) this collapses to
+    // `resolveDict`.
+    const tierDict = effectiveLocale
+      ? resolveDictLocale(resolvedTier, effectiveLocale)
+      : resolveDict(resolvedTier);
+    const dict = { ...enterprise, ...tierDict };
     return { tier: resolvedTier, t: makeT(dict) };
-  }, [resolvedTier]);
+  }, [resolvedTier, effectiveLocale]);
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 };
 

@@ -27,4 +27,9 @@ export const clinic_multi_site: TierDict = {
     'Opt-out verified on {date} by {user}.',
   'clinic.tools.training_status.unknown':
     'Status not yet confirmed — assign to a practice admin to investigate.',
+
+  // R2 — projected admin label changes on multi-site (the practice owner
+  // becomes a group administrator). Staff label is inherited.
+  'clinic.role.admin': 'Group administrator',
+  'clinic.role.staff': clinic_standard['clinic.role.staff'] ?? 'Staff',
 };

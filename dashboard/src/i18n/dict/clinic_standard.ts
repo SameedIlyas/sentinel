@@ -27,4 +27,10 @@ export const clinic_standard: TierDict = {
     'Opt-out verified on {date} by {user}.',
   'clinic.tools.training_status.unknown':
     'Status not yet confirmed — assign to a practice admin to investigate.',
+
+  // R2 — projected role labels inherit from clinic_basic; standard does not
+  // alter them. Listed explicitly here for grep-discoverability and so a
+  // future copy tweak (e.g. "Practice manager") has a clear landing site.
+  'clinic.role.admin': clinic_basic['clinic.role.admin'] ?? 'Practice owner',
+  'clinic.role.staff': clinic_basic['clinic.role.staff'] ?? 'Staff',
 };
