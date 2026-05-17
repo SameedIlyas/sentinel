@@ -6,6 +6,7 @@ import {
 } from '@mui/material';
 
 import apiClient from '@/api/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { useT } from '@/i18n';
 import {
   trainingBannerKey,
@@ -78,10 +79,6 @@ const empty: ToolForm = {
   model_training_status_evidence: '',
 };
 
-interface CurrentUserMinimal {
-  role?: string;
-}
-
 const ToolEditor: React.FC = () => {
   const t = useT();
   const navigate = useNavigate();
@@ -92,21 +89,16 @@ const ToolEditor: React.FC = () => {
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Admin gate + BAA-aware banner (PRD.v2.md §6.8.2.a/b). Pulled
-  // best-effort from existing endpoints to avoid touching the
-  // AuthContext surface owned by workstream R2.
-  const [productRole, setProductRole] = useState<string>('viewer');
+  // Review HIGH #3 — consume the R2-projected product role from
+  // AuthContext rather than re-fetching /v1/auth/me. The projection
+  // already returns 'admin' for both backend admin roles on clinic
+  // tiers (see dashboard/src/auth/clinicProductRole.ts), so the gate
+  // becomes a single equality check.
+  const { productRole } = useAuth();
+  const isAdmin = productRole === 'admin';
   const [baaSigned, setBaaSigned] = useState<boolean>(false);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const me = await apiClient.get<CurrentUserMinimal>('/v1/auth/me');
-        if (typeof me?.role === 'string') setProductRole(me.role);
-      } catch {
-        /* default 'viewer' is the most restrictive — fail closed. */
-      }
-    })();
     (async () => {
       try {
         const summary = await apiClient.get<{ baa_signed?: boolean }>(
@@ -297,7 +289,7 @@ const ToolEditor: React.FC = () => {
             }
             fullWidth
             helperText={
-              productRole !== 'admin' && productRole !== 'system_admin'
+              !isAdmin
                 ? 'Only the Practice owner (Admin) can mark this Verified.'
                 : undefined
             }
@@ -306,9 +298,7 @@ const ToolEditor: React.FC = () => {
               <MenuItem
                 key={o.value}
                 value={o.value}
-                disabled={
-                  o.adminOnly && productRole !== 'admin' && productRole !== 'system_admin'
-                }
+                disabled={o.adminOnly && !isAdmin}
               >
                 {o.label}
               </MenuItem>

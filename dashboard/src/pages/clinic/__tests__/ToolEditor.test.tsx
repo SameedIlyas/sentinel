@@ -6,14 +6,29 @@ import ToolEditor from '../ToolEditor';
 import apiClient from '@/api/client';
 import { I18nProvider } from '@/i18n';
 import { clinic_basic as clinicBasicDict } from '@/i18n/dict/clinic_basic';
+import type { ProductRole } from '@/auth/clinicProductRole';
 
 vi.mock('@/api/client', () => ({
-  default: { get: vi.fn(), post: vi.fn(), put: vi.fn() },
+  default: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    isAuthenticated: () => true,
+    validateToken: vi.fn(),
+    login: vi.fn(),
+    logout: vi.fn(),
+  },
 }));
 
-const mockApi = (role: string, baaSigned: boolean) => {
+// Review HIGH #3 — ToolEditor now consumes useAuth().productRole, so
+// tests stub the hook directly rather than re-mocking /v1/auth/me.
+const mockUseAuth = vi.fn<[], { productRole: ProductRole | null }>();
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => mockUseAuth(),
+}));
+
+const setupApi = (baaSigned: boolean) => {
   (apiClient.get as any).mockImplementation((url: string) => {
-    if (url === '/v1/auth/me') return Promise.resolve({ role });
     if (url.startsWith('/v1/clinic/dashboard/summary'))
       return Promise.resolve({ baa_signed: baaSigned });
     return Promise.resolve(null);
@@ -31,10 +46,10 @@ describe('ToolEditor — training-status admin gate (PRD §6.8.2)', () => {
     vi.clearAllMocks();
   });
 
-  it('disables the Verified option for non-admin (compliance_officer)', async () => {
-    mockApi('compliance_officer', true);
+  it('disables the Verified option for non-admin (staff)', async () => {
+    mockUseAuth.mockReturnValue({ productRole: 'staff' });
+    setupApi(true);
     render(wrap(<ToolEditor />));
-    // Wait for the api/me + summary fetches to settle.
     await waitFor(() => {
       expect(
         screen.getByText('Only the Practice owner (Admin) can mark this Verified.'),
@@ -43,16 +58,17 @@ describe('ToolEditor — training-status admin gate (PRD §6.8.2)', () => {
   });
 
   it('omits the admin-only helper text when productRole is admin', async () => {
-    mockApi('admin', true);
+    mockUseAuth.mockReturnValue({ productRole: 'admin' });
+    setupApi(true);
     render(wrap(<ToolEditor />));
-    // Wait briefly for the role to settle then assert the helper text is gone.
     await waitFor(() =>
       expect(screen.queryByText(/Only the Practice owner/i)).not.toBeInTheDocument(),
     );
   });
 
   it('shows the warning_no_baa banner when status is trains_on_customer_data + no BAA', async () => {
-    mockApi('admin', false);
+    mockUseAuth.mockReturnValue({ productRole: 'admin' });
+    setupApi(false);
     render(wrap(<ToolEditor />));
     // Wait for the form to render (the "Vendor" field is unique).
     await waitFor(() =>
