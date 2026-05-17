@@ -46,7 +46,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useThemeMode } from '@/contexts/ThemeContext';
 import { useUIStore } from '@/stores/uiStore';
 import { getNavForUserAndTier } from '@/config/navigation';
-import { UserRole, resolveTier } from '@/types';
+import { UserRole, resolveTier, isClinicTier } from '@/types';
+import { useT } from '@/i18n';
 import { WalkthroughOverlay, useWalkthrough } from '@/walkthrough';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import PageErrorBoundary from '@/components/common/PageErrorBoundary';
@@ -95,7 +96,8 @@ const AppLayout: React.FC = () => {
   const { mode, toggleTheme } = useThemeMode();
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout, productRole } = useAuth();
+  const t = useT();
   const { sidebarOpen, toggleSidebar } = useUIStore();
   const { restart: restartWalkthrough } = useWalkthrough();
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
@@ -114,12 +116,31 @@ const AppLayout: React.FC = () => {
   const desktopWidth = sidebarOpen ? DRAWER_WIDTH : DRAWER_COLLAPSED;
   // On mobile the sidebar overlays content, so the main column reserves no width for it.
   const currentWidth = isMobile ? 0 : desktopWidth;
-  const roleColor = ROLE_COLORS[user?.role ?? ''] ?? theme.palette.text.secondary;
+  const tier = resolveTier(user?.tier);
+  const onClinic = isClinicTier(tier);
+
+  // R2 — Friendly role label.  On clinic tiers, render the projected
+  // product role via i18n ('clinic.role.admin' | 'clinic.role.staff').
+  // On enterprise tier, fall back to the canonical 'role.<backend>' keys.
+  const roleLabel = (() => {
+    if (!user || !productRole) return '';
+    if (onClinic) {
+      // productRole is 'admin' | 'staff' on clinic tiers.
+      return t(`clinic.role.${productRole}`, productRole);
+    }
+    return t(`role.${user.role}`, user.role);
+  })();
+  // Role chip colour keys off the backend role so existing palette mapping
+  // is preserved on the enterprise tier; on clinic tiers, every staff role
+  // shares the projected colour via the 'admin'/'staff' lookup fallback.
+  const colorKey = onClinic && productRole ? productRole : (user?.role ?? '');
+  const roleColor = ROLE_COLORS[colorKey] ?? theme.palette.text.secondary;
 
   const navSections = user
     ? getNavForUserAndTier(
         user.role as UserRole,
-        resolveTier(user.tier),
+        tier,
+        productRole ?? undefined,
       )
     : [];
 
@@ -211,7 +232,7 @@ const AppLayout: React.FC = () => {
               <Typography sx={{ fontWeight: 600, lineHeight: 1.2, fontSize: '0.775rem', color: 'text.primary' }}>
                 {user?.full_name || user?.username}
               </Typography>
-              <Typography sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>{user?.role}</Typography>
+              <Typography sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>{roleLabel}</Typography>
             </Box>
             <KeyboardArrowDown sx={{ fontSize: 15, color: 'text.secondary' }} />
           </Box>
@@ -322,7 +343,7 @@ const AppLayout: React.FC = () => {
                 <Typography sx={{ fontWeight: 600, fontSize: '0.75rem', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'text.primary' }}>
                   {user?.full_name || user?.username}
                 </Typography>
-                <Chip label={user?.role} size="small" sx={{ height: 17, fontSize: '0.55rem', fontWeight: 600, bgcolor: `${roleColor}18`, color: roleColor, border: `1px solid ${roleColor}30`, mt: 0.25, textTransform: 'uppercase', letterSpacing: '0.05em', '& .MuiChip-label': { px: 0.75 } }} />
+                <Chip label={roleLabel || user?.role} size="small" sx={{ height: 17, fontSize: '0.55rem', fontWeight: 600, bgcolor: `${roleColor}18`, color: roleColor, border: `1px solid ${roleColor}30`, mt: 0.25, textTransform: 'uppercase', letterSpacing: '0.05em', '& .MuiChip-label': { px: 0.75 } }} />
               </Box>
             </Box>
           </Box>

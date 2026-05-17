@@ -1,5 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, LoginRequest, UserRole, TierKey, resolveTier } from '@/types';
+import {
+  getClinicProductRole,
+  type ProductRole,
+} from '@/auth/clinicProductRole';
 import apiClient from '@/api/client';
 
 interface AuthContextType {
@@ -8,6 +12,17 @@ interface AuthContextType {
   isLoading: boolean;
   /** Convenience accessor — `user?.tier ?? 'enterprise'`. */
   tier: TierKey;
+  /**
+   * R2 — Projected product role:
+   *  - On clinic tiers, `'admin' | 'staff'` (eight backend roles collapsed
+   *    to two for UX).
+   *  - On enterprise tier, the backend `UserRole` itself (identity).
+   *  - `null` when no user is authenticated.
+   *
+   * Source of truth for *access* is still backend RBAC
+   * (`policy_engine/auth/rbac.py`). This is a presentation projection only.
+   */
+  productRole: ProductRole | null;
   login: (credentials: LoginRequest) => Promise<void>;
   logout: () => Promise<void>;
   hasRole: (roles: UserRole | UserRole[]) => boolean;
@@ -182,9 +197,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const tier: TierKey = resolveTier(user?.tier);
+  const productRole: ProductRole | null = user
+    ? getClinicProductRole(user.role, tier)
+    : null;
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, tier, login, logout, hasRole, hasPermission }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isAuthenticated: !!user,
+        isLoading,
+        tier,
+        productRole,
+        login,
+        logout,
+        hasRole,
+        hasPermission,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
