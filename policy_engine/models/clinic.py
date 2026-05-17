@@ -49,6 +49,35 @@ class ClinicAiToolCategory(str, enum.Enum):
     OTHER = "other"
 
 
+class ClinicAiToolModelTrainingStatus(str, enum.Enum):
+    """Vendor's capability — does the tool train its models on customer prompts?
+
+    Distinct from ``ClinicAiToolPracticeOptOutState`` (HEALTH-5 split): this
+    column records what the vendor *offers*, not what the practice has
+    *configured*. See PRD.v2.md §6.8.2.a.
+    """
+
+    UNKNOWN = "unknown"
+    NO_TRAINING = "no_training"
+    TRAINS_ON_CUSTOMER_DATA = "trains_on_customer_data"
+    OPT_OUT_AVAILABLE = "opt_out_available"
+
+
+class ClinicAiToolPracticeOptOutState(str, enum.Enum):
+    """The practice's actual configuration of the vendor opt-out.
+
+    Audit-relevant — answers the compliance officer's question "is opt-out
+    actually toggled in our ChatGPT Team account today?" Only ``Admin``
+    product-role users may transition to ``VERIFIED``; see
+    ``policy_engine/routes/clinic/tools.py``.
+    """
+
+    NOT_APPLICABLE = "not_applicable"
+    REQUIRED_NOT_SET = "required_not_set"
+    REQUIRED_AND_SET = "required_and_set"
+    VERIFIED = "verified"
+
+
 class ClinicAiTool(Base):
     """An AI tool a clinic has manually registered.
 
@@ -92,6 +121,25 @@ class ClinicAiTool(Base):
     )
     notes = Column(String, nullable=True)
     source = Column(String, nullable=False, default="manual")  # manual | extension
+    # PRD.v2.md §6.8.2.a — model training status (vendor capability) and
+    # practice opt-out state (practice configuration). HEALTH-5 split.
+    model_training_status = Column(
+        Enum(ClinicAiToolModelTrainingStatus),
+        nullable=False,
+        default=ClinicAiToolModelTrainingStatus.UNKNOWN,
+    )
+    practice_opt_out_state = Column(
+        Enum(ClinicAiToolPracticeOptOutState),
+        nullable=False,
+        default=ClinicAiToolPracticeOptOutState.NOT_APPLICABLE,
+    )
+    opt_out_verified_at = Column(DateTime, nullable=True)
+    opt_out_verified_by_user_id = Column(
+        String,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    model_training_status_evidence = Column(String(2000), nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(
         DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
