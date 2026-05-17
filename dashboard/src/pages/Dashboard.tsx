@@ -85,10 +85,20 @@ const Dashboard: React.FC = () => {
   };
 
   useEffect(() => {
+    // Always do an initial fetch on mount so the dashboard is not blank
+    // while the WebSocket handshake is in flight.
     fetchMetrics();
+  }, []);
+
+  useEffect(() => {
+    // HIGH-029 — only poll while the WebSocket is disconnected. When the
+    // socket is live and pushing metrics_update events, the 60s REST poll
+    // races the stream and frequently overwrites fresh push data with an
+    // older REST snapshot whose response landed last.
+    if (isConnected) return;
     const interval = setInterval(fetchMetrics, 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isConnected]);
 
   const StatCard: React.FC<{
     title: string;

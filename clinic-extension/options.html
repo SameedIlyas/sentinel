@@ -11,6 +11,7 @@
     input { width: 100%; padding: 8px 10px; border: 1px solid #e3e8ee; border-radius: 6px; font-size: 13px; }
     button { margin-top: 16px; padding: 8px 14px; border: 0; border-radius: 6px; background: #635bff; color: white; font-weight: 600; cursor: pointer; }
     .ok { color: #0ea371; font-size: 12px; margin-top: 10px; display: none; }
+    .err { color: #cd3500; font-size: 12px; margin-top: 10px; display: none; }
     .help { font-size: 11px; color: #8b8fa3; margin-top: 4px; }
   </style>
 </head>
@@ -24,6 +25,7 @@
   <input id="endpoint" type="text" placeholder="https://api.sentinel.your-clinic.com" />
   <button id="save">Save</button>
   <div id="ok" class="ok">Saved.</div>
+  <div id="err" class="err"></div>
   <script src="options.js"></script>
 </body>
 </html>

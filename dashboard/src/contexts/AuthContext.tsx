@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, LoginRequest, UserRole, TierKey } from '@/types';
+import { User, LoginRequest, UserRole, TierKey, resolveTier } from '@/types';
 import apiClient from '@/api/client';
 
 interface AuthContextType {
@@ -181,7 +181,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return perms?.[resource]?.includes(action) ?? false;
   };
 
-  const tier: TierKey = (user?.tier as TierKey) ?? 'enterprise';
+  const tier: TierKey = resolveTier(user?.tier);
 
   return (
     <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, tier, login, logout, hasRole, hasPermission }}>

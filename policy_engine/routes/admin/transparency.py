@@ -117,6 +117,23 @@ def _require_admin(current_user: Optional[User]) -> None:
         )
 
 
+def _enforce_record_tenancy(record: TransparencyRecordModel, current_user: User) -> None:
+    """SYSTEM_ADMIN may act on any record; ORG_ADMIN is confined to its own org.
+
+    Closes HIGH-004 — without this check an ORG_ADMIN at org A could overwrite
+    or publish a record owned by org B, since ``_require_admin`` only verified
+    the role bit. Returns 404 (not 403) for cross-tenant access so we do not
+    leak existence to a probing attacker.
+    """
+    if current_user.role == UserRole.SYSTEM_ADMIN:
+        return
+    if record.organization_id != current_user.organization_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Record not found",
+        )
+
+
 def _to_domain(payload: TransparencyCreate) -> TransparencyRecordDomain:
     return TransparencyRecordDomain(
         model_name=payload.model_name,
@@ -201,6 +218,7 @@ def publish_transparency_record(
     record = db.query(TransparencyRecordModel).filter(TransparencyRecordModel.id == record_id).first()
     if not record:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found")
+    _enforce_record_tenancy(record, current_user)
 
     now = datetime.utcnow()
     record.published_at = now
@@ -310,6 +328,7 @@ def update_transparency_record(
     record = db.query(TransparencyRecordModel).filter(TransparencyRecordModel.id == record_id).first()
     if not record:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found")
+    _enforce_record_tenancy(record, current_user)
 
     domain_record = _to_domain(payload)
     errors = validate_record(domain_record)

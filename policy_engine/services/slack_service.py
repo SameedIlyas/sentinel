@@ -1,5 +1,6 @@
 """Slack webhook integration service"""
 
+import asyncio
 import requests
 import logging
 from typing import Optional, Dict, Any
@@ -8,6 +9,14 @@ from datetime import datetime
 from policy_engine.models.alert import Alert, AlertSeverity
 
 logger = logging.getLogger(__name__)
+
+
+def _running_loop() -> Optional[asyncio.AbstractEventLoop]:
+    """Return the running event loop, or ``None`` if called from sync context."""
+    try:
+        return asyncio.get_running_loop()
+    except RuntimeError:
+        return None
 
 
 class SlackService:
@@ -59,8 +68,36 @@ class SlackService:
             policy_violated=policy_violated,
             action_attempted=action_attempted
         )
-        
-        # Send with retry logic
+
+        # If called from inside an asyncio event loop (e.g. the FastAPI policy
+        # check handler), offload the blocking ``requests`` call onto the
+        # default executor so it never stalls the loop. The caller treats this
+        # as fire-and-forget (see policy_check.py:199), so returning True
+        # immediately preserves the historical contract.
+        loop = _running_loop()
+        if loop is not None:
+            alert_id = alert.id
+            alert_type = alert.alert_type
+            loop.run_in_executor(
+                None,
+                self._perform_send,
+                target_webhook,
+                message,
+                alert_id,
+                alert_type,
+            )
+            return True
+
+        return self._perform_send(target_webhook, message, alert.id, alert.alert_type)
+
+    def _perform_send(
+        self,
+        target_webhook: str,
+        message: Dict[str, Any],
+        alert_id: str,
+        alert_type: str,
+    ) -> bool:
+        """Synchronous network worker (called inline or via executor)."""
         for attempt in range(self.retry_attempts):
             try:
                 response = requests.post(
@@ -69,27 +106,27 @@ class SlackService:
                     headers={'Content-Type': 'application/json'},
                     timeout=5
                 )
-                
+
                 if response.status_code == 200:
                     logger.info(
-                        f"Slack alert sent successfully: alert_id={alert.id}, "
-                        f"type={alert.alert_type}"
+                        f"Slack alert sent successfully: alert_id={alert_id}, "
+                        f"type={alert_type}"
                     )
                     return True
                 else:
                     logger.warning(
                         f"Slack webhook returned {response.status_code}: {response.text}"
                     )
-                    
+
             except requests.exceptions.RequestException as e:
                 logger.error(
                     f"Slack webhook request failed (attempt {attempt + 1}/{self.retry_attempts}): {str(e)}"
                 )
-                
+
                 if attempt < self.retry_attempts - 1:
                     import time
                     time.sleep(self.retry_delay_seconds * (attempt + 1))  # Exponential backoff
-        
+
         logger.error(f"Failed to send Slack alert after {self.retry_attempts} attempts")
         return False
     

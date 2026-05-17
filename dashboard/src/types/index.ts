@@ -33,6 +33,21 @@ export const CLINIC_TIERS: TierKey[] = [
 export const isClinicTier = (tier: TierKey | null | undefined): boolean =>
   tier !== null && tier !== undefined && (CLINIC_TIERS as string[]).includes(tier);
 
+const KNOWN_TIERS = new Set<string>(['enterprise', ...CLINIC_TIERS]);
+
+/**
+ * HIGH-026 — Runtime-validate an arbitrary value into a TierKey.
+ *
+ * Replaces the unsafe `(raw as TierKey)` casts at AuthContext.tsx:184 and
+ * AppLayout.tsx:121-122. Any value outside the four canonical tiers
+ * collapses to 'enterprise', which keeps the historical default behaviour
+ * for unrecognised or null inputs without quietly disabling tier checks.
+ */
+export const resolveTier = (raw: unknown): TierKey => {
+  if (typeof raw !== 'string') return 'enterprise';
+  return KNOWN_TIERS.has(raw) ? (raw as TierKey) : 'enterprise';
+};
+
 export interface User {
   id: string;
   username: string;
