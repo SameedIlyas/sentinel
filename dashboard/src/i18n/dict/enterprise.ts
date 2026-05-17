@@ -83,6 +83,23 @@ export const enterprise: TierDict = {
   'clinic.tools.field.handles_phi': 'Does this tool see patient information?',
   'clinic.tools.field.risk_level': 'Risk level',
   'clinic.tools.field.notes': 'Notes',
+  'clinic.tools.field.model_training_status': 'Does the vendor train on your data?',
+  'clinic.tools.field.practice_opt_out_state': 'Opt-out status in your account',
+  'clinic.tools.field.model_training_status_evidence':
+    'Where did you confirm this? (link or note)',
+
+  // Locked training-status banner copy — PRD.v2.md §6.8.2.b. DO NOT
+  // edit verbatim strings without healthcare-reviewer sign-off.
+  'clinic.tools.training_status.warning_no_baa':
+    'This tool may train its models on what you type here. Treat anything entered as disclosed outside your practice. Do not enter patient information unless your written BAA with the vendor explicitly permits training use — most BAAs do not.',
+  'clinic.tools.training_status.warning_baa_present':
+    "This tool's vendor trains on prompts, but your BAA permits this use. Patient information is still handled under the BAA's terms — confirm with your compliance lead before entering new categories of PHI.",
+  'clinic.tools.training_status.opt_out_required':
+    "This tool trains on prompts unless you turn it off in the vendor's settings. Confirm the opt-out is set, then mark this tool as Verified in Sentinel.",
+  'clinic.tools.training_status.opt_out_verified':
+    'Opt-out verified on {date} by {user}.',
+  'clinic.tools.training_status.unknown':
+    'Status not yet confirmed — assign to a practice admin to investigate.',
 
   'clinic.policies.title': 'Practice rules',
   'clinic.policies.subtitle':
