@@ -12,4 +12,9 @@ export const clinic_multi_site: TierDict = {
   'noun.organizations': 'Practice groups',
   'role.admin': 'Group administrator',
   'role.cmio': 'Medical director',
+
+  // R2 — projected admin label changes on multi-site (the practice owner
+  // becomes a group administrator). Staff label is inherited.
+  'clinic.role.admin': 'Group administrator',
+  'clinic.role.staff': clinic_standard['clinic.role.staff'] ?? 'Staff',
 };

@@ -36,4 +36,10 @@ export const clinic_basic: TierDict = {
   'role.clinical_user': 'Clinician',
   'role.analyst': 'Reviewer',
   'role.viewer': 'Observer',
+
+  // R2 — projected two-role clinic product persona (see PRD.v2 §3.1).
+  // These keys are *additive*: they coexist with the canonical
+  // `role.<backend>` keys above so direct backend lookups still work.
+  'clinic.role.admin': 'Practice owner',
+  'clinic.role.staff': 'Staff',
 };
