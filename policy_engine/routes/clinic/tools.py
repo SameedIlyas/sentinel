@@ -154,17 +154,23 @@ def _maybe_emit_trains_on_data_alert(
     """Emit a clinic.tool.trains_on_data alert, suppressing duplicates.
 
     PRD.v2.md §6.8.2.c — at most one alert per (org_id, tool_id) per
-    30-day window. Suppression is implemented as a query on existing
-    rows; we accept the small race window because alert dispatch is
-    idempotent at the consumer side (HITL, Slack, email) and the
-    operational cost of a duplicate alert is the same as missing one is
-    intolerable. No flush is performed — the caller commits.
+    30-day window. No flush is performed — the caller commits.
+
+    Review HIGH #4 — race-free on Postgres via ``with_for_update`` on the
+    organization row (serialises concurrent ``create_tool`` /
+    ``update_tool`` calls for the same org through the check-then-insert
+    section). On SQLite this resolves to a no-op, but the test/dev
+    database is single-writer anyway so no race surfaces there.
     """
     if (
         tool.model_training_status
         != ClinicAiToolModelTrainingStatus.TRAINS_ON_CUSTOMER_DATA
     ):
         return
+    # Lock the org row for the remainder of this transaction so any
+    # concurrent emitter for the same tenant blocks until we commit.
+    # The result is unused — we only need the lock.
+    db.query(Organization).filter(Organization.id == org_id).with_for_update().first()
     cutoff = datetime.utcnow() - _TRAINS_ON_DATA_WINDOW
     existing = (
         db.query(Alert)
@@ -190,6 +196,10 @@ def _maybe_emit_trains_on_data_alert(
         organization_id=org_id,
     )
     db.add(alert)
+    # Flush so a subsequent in-session query observes the pending row
+    # via autoflush, preventing back-to-back helper calls in the same
+    # transaction from each inserting (review HIGH #4).
+    db.flush()
 
 
 # ── Routes ──────────────────────────────────────────────────────────────

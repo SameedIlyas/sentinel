@@ -426,6 +426,71 @@ def test_422_returns_structured_detail(
     assert "msg" in first
 
 
+def test_alert_helper_double_call_inserts_once(
+    clinic_authed_client, db_session
+) -> None:
+    """Review HIGH #4 — calling the helper twice in the same transaction
+    inserts at most one alert row.
+
+    A deterministic race test is not feasible against SQLite (single
+    writer), so this test exercises the check-then-insert ordering: two
+    back-to-back helper calls must collapse to a single insert because
+    the second call observes the first call's pending row via the
+    in-session query.
+    """
+    from policy_engine.models.alert import Alert
+    from policy_engine.models.clinic import (
+        ClinicAiTool,
+        ClinicAiToolModelTrainingStatus,
+    )
+    from policy_engine.routes.clinic.tools import (
+        _maybe_emit_trains_on_data_alert,
+    )
+
+    client, org, _user = clinic_authed_client
+    # Create a tool so we have a valid agent_id to attach alerts to.
+    create = client.post(
+        "/v1/clinic/tools",
+        json={
+            "name": "Race Tool",
+            # Use a non-training status to prevent the create path from
+            # emitting an alert; we want a clean baseline for the helper.
+            "model_training_status": "no_training",
+        },
+    )
+    assert create.status_code == 201
+    tool_id = create.json()["id"]
+    tool = (
+        db_session.query(ClinicAiTool).filter(ClinicAiTool.id == tool_id).first()
+    )
+    assert tool is not None
+    # Simulate the post-update state we care about.
+    tool.model_training_status = ClinicAiToolModelTrainingStatus.TRAINS_ON_CUSTOMER_DATA
+
+    before = (
+        db_session.query(Alert)
+        .filter(
+            Alert.organization_id == org.id,
+            Alert.alert_type == "clinic.tool.trains_on_data",
+            Alert.agent_id == tool.id,
+        )
+        .count()
+    )
+    _maybe_emit_trains_on_data_alert(db_session, org.id, tool)
+    _maybe_emit_trains_on_data_alert(db_session, org.id, tool)
+    db_session.commit()
+    after = (
+        db_session.query(Alert)
+        .filter(
+            Alert.organization_id == org.id,
+            Alert.alert_type == "clinic.tool.trains_on_data",
+            Alert.agent_id == tool.id,
+        )
+        .count()
+    )
+    assert after - before == 1
+
+
 def test_validator_blocks_verified_without_context() -> None:
     """Review CRITICAL #1 — validator fail-closed on missing context.
 
