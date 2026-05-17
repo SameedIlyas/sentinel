@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field, ValidationInfo, field_validator
+from pydantic import BaseModel, Field, ValidationError, ValidationInfo, field_validator
 from sqlalchemy.orm import Session
 
 from policy_engine.auth.rbac import get_current_user
@@ -225,8 +225,19 @@ def create_tool(
         payload = ToolCreate.model_validate(
             payload_raw, context={"current_user": current_user}
         )
+    except ValidationError as exc:
+        # Review HIGH #2 — return FastAPI's standard structured detail
+        # (list of {type, loc, msg, ...}) so SDKs and clients can parse
+        # the error rather than a multi-line stringified blob.
+        raise HTTPException(
+            status_code=422,
+            detail=exc.errors(include_url=False, include_context=False),
+        )
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        raise HTTPException(
+            status_code=422,
+            detail=[{"type": "value_error", "loc": [], "msg": str(exc)}],
+        )
     # HIPAA safeguard — refuse free-text fields that look like PHI before
     # we ever persist them.
     reject_if_phi_present(
@@ -323,8 +334,18 @@ def update_tool(
         payload = ToolUpdate.model_validate(
             payload_raw, context={"current_user": current_user}
         )
+    except ValidationError as exc:
+        # Review HIGH #2 — structured detail (list of error dicts) so SDK
+        # consumers can parse the response.
+        raise HTTPException(
+            status_code=422,
+            detail=exc.errors(include_url=False, include_context=False),
+        )
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        raise HTTPException(
+            status_code=422,
+            detail=[{"type": "value_error", "loc": [], "msg": str(exc)}],
+        )
     update_dict = payload.model_dump(exclude_unset=True)
     reject_if_phi_present(
         {

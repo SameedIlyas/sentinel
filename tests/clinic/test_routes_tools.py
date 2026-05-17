@@ -382,6 +382,50 @@ def test_alert_emitted_once_in_30d_window(clinic_authed_client, db_session) -> N
     assert n_after_flip == 1
 
 
+def test_422_returns_structured_detail(
+    db_session, make_clinic_org_factory
+) -> None:
+    """Review HIGH #2 — 422 detail is a list of {type, loc, msg, ...}.
+
+    FastAPI clients (auto-generated SDKs, OpenAPI tooling) parse the
+    standard pydantic error shape. The previous ``detail: "<multiline
+    stringified pydantic error>"`` envelope was unparseable.
+    """
+    from fastapi.testclient import TestClient
+    from policy_engine.database import get_db
+    from policy_engine.main import app
+    from policy_engine.models.user import UserRole
+    from tests.factories.clinic import make_clinic_admin
+
+    org = make_clinic_org_factory()
+    _user, jwt = make_clinic_admin(
+        db_session, org, role=UserRole.COMPLIANCE_OFFICER, username="staff_for_422"
+    )
+
+    app.dependency_overrides[get_db] = lambda: db_session
+    try:
+        c = TestClient(app, raise_server_exceptions=True)
+        c.headers.update({"Authorization": f"Bearer {jwt}"})
+        resp = c.post(
+            "/v1/clinic/tools",
+            json={
+                "name": "Some Tool",
+                "practice_opt_out_state": "verified",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert resp.status_code == 422, resp.text
+    body = resp.json()
+    assert isinstance(body["detail"], list), body
+    assert len(body["detail"]) >= 1
+    first = body["detail"][0]
+    # Standard pydantic v2 error keys.
+    assert "type" in first
+    assert "loc" in first
+    assert "msg" in first
+
+
 def test_validator_blocks_verified_without_context() -> None:
     """Review CRITICAL #1 — validator fail-closed on missing context.
 
