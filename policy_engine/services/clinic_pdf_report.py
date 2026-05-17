@@ -82,6 +82,10 @@ class ReportData:
     tools_active: int
     tools_under_review: int
     tools_high_risk: int
+    # PRD.v2.md §6.8.2.c — count of tools whose vendor trains on customer
+    # prompts. Surfaces in the "Tools registry" section of the monthly
+    # PDF so compliance officers can audit how exposed the practice is.
+    tools_trains_on_customer_data: int
     policies_total: int
     policies_enabled: int
     alerts_total: int
@@ -101,6 +105,9 @@ def _collect(db: Session, org: Organization, period_start: datetime, period_end:
     tools_active = tool_q.filter(ClinicAiTool.status == "active").count()
     tools_under_review = tool_q.filter(ClinicAiTool.status == "under_review").count()
     tools_high_risk = tool_q.filter(ClinicAiTool.risk_level == "high").count()
+    tools_trains_on_customer_data = tool_q.filter(
+        ClinicAiTool.model_training_status == "trains_on_customer_data"
+    ).count()
 
     pol_q = db.query(Policy).filter(Policy.organization_id == org.id)
     policies_total = pol_q.count()
@@ -144,6 +151,7 @@ def _collect(db: Session, org: Organization, period_start: datetime, period_end:
         tools_active=tools_active,
         tools_under_review=tools_under_review,
         tools_high_risk=tools_high_risk,
+        tools_trains_on_customer_data=tools_trains_on_customer_data,
         policies_total=policies_total,
         policies_enabled=policies_enabled,
         alerts_total=alerts_total,
@@ -225,6 +233,7 @@ def _render_html(data: ReportData) -> str:
 <div class="kv"><span class="k">Currently active</span><span class="v">{data.tools_active}</span></div>
 <div class="kv"><span class="k">Under review</span><span class="v">{data.tools_under_review}</span></div>
 <div class="kv"><span class="k">High-risk</span><span class="v">{data.tools_high_risk}</span></div>
+<div class="kv"><span class="k">Tools that train on your data</span><span class="v">{data.tools_trains_on_customer_data}</span></div>
 
 <h2>Compliance posture</h2>
 <div class="kv"><span class="k">HIPAA BAA</span><span class="v">{baa}</span></div>
