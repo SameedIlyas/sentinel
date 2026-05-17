@@ -65,6 +65,16 @@ _ALERT_TYPE_TRANSLATIONS: dict[str, tuple[str, str]] = {
         "Practice rule was broken",
         "{{tool}} did something that violates one of your practice rules.",
     ),
+    # PRD.v2.md §6.8.2.c — new alert type for tools whose vendor trains
+    # on customer prompts. Wording is intentionally non-alarmist (BAA may
+    # legitimately permit the use) and the next-step gives both
+    # alternatives.
+    "clinic.tool.trains_on_data": (
+        "Tool may train on your data",
+        "Heads-up: {{tool}} uses entered prompts to train its public "
+        "models. Move it to a Sentinel-approved tool if you handle PHI "
+        "in it.",
+    ),
 }
 
 
@@ -107,6 +117,10 @@ _NEXT_STEPS: dict[str, str] = {
     "bias_finding": "Review the fairness report before continuing to use the tool.",
     "new_agent": "Confirm with IT that this tool is expected.",
     "policy_violation": "Check whether the rule should be updated, or talk to the user.",
+    "clinic.tool.trains_on_data": (
+        "Move PHI workflows off this tool, or sign a BAA with the vendor "
+        "that permits training use."
+    ),
 }
 
 
