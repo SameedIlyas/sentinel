@@ -7,7 +7,7 @@ ML registries to sync from; they need a form they can fill in 30 seconds.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -171,7 +171,7 @@ def _maybe_emit_trains_on_data_alert(
     # concurrent emitter for the same tenant blocks until we commit.
     # The result is unused — we only need the lock.
     db.query(Organization).filter(Organization.id == org_id).with_for_update().first()
-    cutoff = datetime.utcnow() - _TRAINS_ON_DATA_WINDOW
+    cutoff = datetime.now(timezone.utc) - _TRAINS_ON_DATA_WINDOW
     existing = (
         db.query(Alert)
         .filter(
@@ -186,7 +186,7 @@ def _maybe_emit_trains_on_data_alert(
         return
     alert = Alert(
         id=str(uuid.uuid4()),
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         severity=AlertSeverity.MEDIUM,
         alert_type=_TRAINS_ON_DATA_ALERT_TYPE,
         agent_id=tool.id,
@@ -259,7 +259,7 @@ def create_tool(
             "model_training_status_evidence": payload.model_training_status_evidence,
         }
     )
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     verified_at = None
     verified_by = None
     if payload.practice_opt_out_state == ClinicAiToolPracticeOptOutState.VERIFIED:
@@ -370,7 +370,7 @@ def update_tool(
     )
     # Detect 'verified' transitions before applying the fields so we can
     # stamp provenance atomically with the state change.
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     new_opt_state = update_dict.get("practice_opt_out_state")
     if (
         new_opt_state == ClinicAiToolPracticeOptOutState.VERIFIED

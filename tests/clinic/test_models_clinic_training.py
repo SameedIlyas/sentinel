@@ -51,7 +51,7 @@ def test_opt_out_verified_by_set_null_on_user_delete(
     Deleting the verifying user must not cascade-delete the tool row, and
     must clear the FK so the audit history is preserved.
     """
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     from tests.factories.clinic import make_clinic_tool
 
@@ -61,7 +61,7 @@ def test_opt_out_verified_by_set_null_on_user_delete(
         clinic_org,
         name="Verified Tool",
         practice_opt_out_state=ClinicAiToolPracticeOptOutState.VERIFIED,
-        opt_out_verified_at=datetime.utcnow(),
+        opt_out_verified_at=datetime.now(timezone.utc),
         opt_out_verified_by_user_id=user.id,
     )
     tool_id = tool.id

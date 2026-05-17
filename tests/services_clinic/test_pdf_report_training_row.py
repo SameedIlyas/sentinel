@@ -7,7 +7,7 @@ registry section.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -36,8 +36,8 @@ def test_collect_counts_trains_on_customer_data(db_session, clinic_org) -> None:
         name="Nuance DAX",
         model_training_status=ClinicAiToolModelTrainingStatus.NO_TRAINING,
     )
-    period_start = datetime.utcnow() - timedelta(days=30)
-    period_end = datetime.utcnow()
+    period_start = datetime.now(timezone.utc) - timedelta(days=30)
+    period_end = datetime.now(timezone.utc)
     data = _collect(db_session, clinic_org, period_start, period_end)
     assert data.tools_trains_on_customer_data == 1
 
@@ -52,8 +52,8 @@ def test_render_html_includes_training_row(db_session, clinic_org) -> None:
         name="GPT4 free",
         model_training_status=ClinicAiToolModelTrainingStatus.TRAINS_ON_CUSTOMER_DATA,
     )
-    period_start = datetime.utcnow() - timedelta(days=30)
-    period_end = datetime.utcnow()
+    period_start = datetime.now(timezone.utc) - timedelta(days=30)
+    period_end = datetime.now(timezone.utc)
     data = _collect(db_session, clinic_org, period_start, period_end)
     html = _render_html(data)
     assert "Tools that train on your data" in html
@@ -64,8 +64,8 @@ def test_render_html_includes_training_row(db_session, clinic_org) -> None:
 def test_render_html_row_present_with_zero_count(db_session, clinic_org) -> None:
     """Row renders even when the count is zero so compliance officers see the
     field exists (avoids 'missing because zero' confusion)."""
-    period_start = datetime.utcnow() - timedelta(days=30)
-    period_end = datetime.utcnow()
+    period_start = datetime.now(timezone.utc) - timedelta(days=30)
+    period_end = datetime.now(timezone.utc)
     data = _collect(db_session, clinic_org, period_start, period_end)
     html = _render_html(data)
     assert "Tools that train on your data" in html
