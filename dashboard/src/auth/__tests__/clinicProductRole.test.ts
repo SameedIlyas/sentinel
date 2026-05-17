@@ -66,11 +66,12 @@ describe('getClinicProductRole — 8 roles × 4 tiers', () => {
         expect(result).toBe(role);
         return;
       }
-      // Clinic tier: SYSTEM_ADMIN / ADMIN → 'admin'; all six others → 'staff'.
+      // Clinic tier: SYSTEM_ADMIN / ADMIN → 'practice_owner';
+      // all six others → 'practice_staff' (review HIGH #5 rename).
       if (ADMIN_BACKEND_ROLES.has(role)) {
-        expect(result).toBe('admin');
+        expect(result).toBe('practice_owner');
       } else {
-        expect(result).toBe('staff');
+        expect(result).toBe('practice_staff');
       }
     },
   );
@@ -82,11 +83,13 @@ describe('getClinicProductRole — 8 roles × 4 tiers', () => {
   });
 
   it.each(CLINIC_TIERS)(
-    "on clinic tier %s, projects 'admin' iff backend role is admin/system_admin",
+    "on clinic tier %s, projects 'practice_owner' iff backend role is admin/system_admin",
     (tier) => {
       for (const role of ALL_ROLES) {
         const projected = getClinicProductRole(role, tier);
-        const expected = ADMIN_BACKEND_ROLES.has(role) ? 'admin' : 'staff';
+        const expected = ADMIN_BACKEND_ROLES.has(role)
+          ? 'practice_owner'
+          : 'practice_staff';
         expect(projected).toBe(expected);
       }
     },
@@ -98,18 +101,18 @@ describe('getClinicProductRole — 8 roles × 4 tiers', () => {
 });
 
 describe('isClinicProductRole type guard', () => {
-  it("recognises 'admin' and 'staff' as ClinicProductRole", () => {
-    expect(isClinicProductRole('admin')).toBe(true);
-    expect(isClinicProductRole('staff')).toBe(true);
+  it("recognises 'practice_owner' and 'practice_staff' as ClinicProductRole", () => {
+    expect(isClinicProductRole('practice_owner')).toBe(true);
+    expect(isClinicProductRole('practice_staff')).toBe(true);
   });
 
-  it('rejects backend UserRoles that have no string overlap with ClinicProductRole', () => {
-    // UserRole.ADMIN intentionally serialises to the literal 'admin' for
-    // backend compatibility (policy_engine/models/user.py:13) and therefore
-    // satisfies the ClinicProductRole guard by string equality. Every other
-    // backend role must be rejected.
+  it('rejects every backend UserRole (no string overlap with renamed literals)', () => {
+    // Review HIGH #5 — the projected literals were renamed from
+    // 'admin' | 'staff' to 'practice_owner' | 'practice_staff' so that
+    // a UserRole.ADMIN (= 'admin') no longer satisfies the guard by
+    // string equality. Every backend role (including ADMIN) is now
+    // rejected.
     for (const role of ALL_ROLES) {
-      if (role === UserRole.ADMIN) continue;
       const value: ProductRole = role;
       expect(isClinicProductRole(value)).toBe(false);
     }

@@ -21,18 +21,18 @@ import {
 } from '../clinicProductRole';
 
 // Exhaustive switch on UserRole — every member must be handled.
-function assertExhaustive(role: UserRole): 'admin' | 'staff' {
+function assertExhaustive(role: UserRole): ClinicProductRole {
   switch (role) {
     case UserRole.SYSTEM_ADMIN:
     case UserRole.ADMIN:
-      return 'admin';
+      return 'practice_owner';
     case UserRole.CMIO:
     case UserRole.DATA_SCIENTIST:
     case UserRole.COMPLIANCE_OFFICER:
     case UserRole.CLINICAL_USER:
     case UserRole.ANALYST:
     case UserRole.VIEWER:
-      return 'staff';
+      return 'practice_staff';
     default: {
       // If a new UserRole member is added without extending the switch
       // above, `role` will not narrow to `never` here and this line will
@@ -45,14 +45,23 @@ function assertExhaustive(role: UserRole): 'admin' | 'staff' {
 
 // ── Type-level assertions ──────────────────────────────────────────────
 
-// `ClinicProductRole` is exactly the 2-element string union.
-const _admin: ClinicProductRole = 'admin';
-const _staff: ClinicProductRole = 'staff';
+// `ClinicProductRole` is exactly the 2-element string union (review
+// HIGH #5 — renamed from 'admin' | 'staff' to remove UserRole.ADMIN
+// string-equality collision).
+const _owner: ClinicProductRole = 'practice_owner';
+const _staff: ClinicProductRole = 'practice_staff';
+
+// Review HIGH #5 — a raw UserRole.ADMIN must NOT be assignable to
+// ClinicProductRole. The @ts-expect-error directive proves the type
+// guard now catches what previously slipped through.
+// @ts-expect-error UserRole.ADMIN is no longer assignable to ClinicProductRole
+const _adminLeak: ClinicProductRole = UserRole.ADMIN;
+void _adminLeak;
 
 // `ProductRole` is the union of ClinicProductRole and UserRole. A plain
 // UserRole literal must be assignable.
 const _user: ProductRole = UserRole.VIEWER;
-const _staffP: ProductRole = 'staff';
+const _staffP: ProductRole = 'practice_staff';
 
 // `getClinicProductRole` must accept (UserRole, TierKey) and return ProductRole.
 const _projection: ProductRole = getClinicProductRole(UserRole.CMIO, 'clinic_basic');
@@ -71,10 +80,10 @@ function _narrowing(value: ProductRole): ClinicProductRole | null {
 export const _r2TypeTestEntries = [
   assertExhaustive(UserRole.SYSTEM_ADMIN),
   assertExhaustive(UserRole.VIEWER),
-  _admin,
+  _owner,
   _staff,
   _user,
   _staffP,
   _projection,
-  _narrowing('admin'),
+  _narrowing('practice_owner'),
 ] as const;

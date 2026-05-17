@@ -69,7 +69,7 @@ describe('AuthContext productRole projection (R2)', () => {
     mockIsAuthenticated.mockReturnValue(true);
   });
 
-  it('projects ADMIN on clinic_basic to "admin"', async () => {
+  it('projects ADMIN on clinic_basic to "practice_owner"', async () => {
     mockUser.mockResolvedValue(makeUser(UserRole.ADMIN, 'clinic_basic'));
     render(
       <AuthProvider>
@@ -78,10 +78,11 @@ describe('AuthContext productRole projection (R2)', () => {
     );
     await flush();
     expect(screen.getByTestId('tier').textContent).toBe('clinic_basic');
-    expect(screen.getByTestId('product-role').textContent).toBe('admin');
+    // Review HIGH #5 — projected literal renamed from 'admin'.
+    expect(screen.getByTestId('product-role').textContent).toBe('practice_owner');
   });
 
-  it('projects CMIO on clinic_basic to "staff"', async () => {
+  it('projects CMIO on clinic_basic to "practice_staff"', async () => {
     mockUser.mockResolvedValue(makeUser(UserRole.CMIO, 'clinic_basic'));
     render(
       <AuthProvider>
@@ -89,7 +90,8 @@ describe('AuthContext productRole projection (R2)', () => {
       </AuthProvider>,
     );
     await flush();
-    expect(screen.getByTestId('product-role').textContent).toBe('staff');
+    // Review HIGH #5 — projected literal renamed from 'staff'.
+    expect(screen.getByTestId('product-role').textContent).toBe('practice_staff');
   });
 
   it('leaves CMIO on enterprise as the backend role (identity)', async () => {

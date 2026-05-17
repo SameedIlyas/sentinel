@@ -95,7 +95,10 @@ const ToolEditor: React.FC = () => {
   // tiers (see dashboard/src/auth/clinicProductRole.ts), so the gate
   // becomes a single equality check.
   const { productRole } = useAuth();
-  const isAdmin = productRole === 'admin';
+  // Review HIGH #5 — projected literal renamed from 'admin' to
+  // 'practice_owner' to remove the UserRole.ADMIN string-equality
+  // collision. Local boolean keeps call sites readable.
+  const isAdmin = productRole === 'practice_owner';
   const [baaSigned, setBaaSigned] = useState<boolean>(false);
 
   useEffect(() => {

@@ -46,6 +46,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useThemeMode } from '@/contexts/ThemeContext';
 import { useUIStore } from '@/stores/uiStore';
 import { getNavForUserAndTier } from '@/config/navigation';
+import {
+  CLINIC_PRODUCT_ROLE_I18N_SUFFIX,
+  isClinicProductRole,
+} from '@/auth/clinicProductRole';
 import { UserRole, resolveTier, isClinicTier } from '@/types';
 import { useT } from '@/i18n';
 import { WalkthroughOverlay, useWalkthrough } from '@/walkthrough';
@@ -122,18 +126,25 @@ const AppLayout: React.FC = () => {
   // R2 — Friendly role label.  On clinic tiers, render the projected
   // product role via i18n ('clinic.role.admin' | 'clinic.role.staff').
   // On enterprise tier, fall back to the canonical 'role.<backend>' keys.
+  //
+  // Review HIGH #5 — projected literals are now 'practice_owner' /
+  // 'practice_staff'. The i18n keys remain ``clinic.role.admin`` /
+  // ``clinic.role.staff`` (those are healthcare-cleared strings); we
+  // translate through ``CLINIC_PRODUCT_ROLE_I18N_SUFFIX``.
   const roleLabel = (() => {
     if (!user || !productRole) return '';
-    if (onClinic) {
-      // productRole is 'admin' | 'staff' on clinic tiers.
-      return t(`clinic.role.${productRole}`, productRole);
+    if (onClinic && isClinicProductRole(productRole)) {
+      const suffix = CLINIC_PRODUCT_ROLE_I18N_SUFFIX[productRole];
+      return t(`clinic.role.${suffix}`, suffix);
     }
     return t(`role.${user.role}`, user.role);
   })();
   // Role chip colour keys off the backend role so existing palette mapping
   // is preserved on the enterprise tier; on clinic tiers, every staff role
   // shares the projected colour via the 'admin'/'staff' lookup fallback.
-  const colorKey = onClinic && productRole ? productRole : (user?.role ?? '');
+  const colorKey = onClinic && productRole && isClinicProductRole(productRole)
+    ? CLINIC_PRODUCT_ROLE_I18N_SUFFIX[productRole]
+    : (user?.role ?? '');
   const roleColor = ROLE_COLORS[colorKey] ?? theme.palette.text.secondary;
 
   const navSections = user

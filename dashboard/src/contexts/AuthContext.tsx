@@ -14,8 +14,10 @@ interface AuthContextType {
   tier: TierKey;
   /**
    * R2 — Projected product role:
-   *  - On clinic tiers, `'admin' | 'staff'` (eight backend roles collapsed
-   *    to two for UX).
+   *  - On clinic tiers, `'practice_owner' | 'practice_staff'` (eight
+   *    backend roles collapsed to two for UX). Renamed from the original
+   *    ``'admin' | 'staff'`` literals in review HIGH #5 to remove the
+   *    runtime string-equality collision with ``UserRole.ADMIN``.
    *  - On enterprise tier, the backend `UserRole` itself (identity).
    *  - `null` when no user is authenticated.
    *

@@ -22,7 +22,7 @@ export interface NavSection {
   allowedRoles?: UserRole[];   // section hidden if user lacks any allowed role
   /** R2 — gate by projected product role on clinic tiers. Ignored on
    *  enterprise (where the projection is identity and product roles
-   *  never include 'admin' | 'staff'). */
+   *  never include 'practice_owner' | 'practice_staff'). */
   allowedProductRoles?: ClinicProductRole[];
   /** If set, the section is shown only when the user's tier is in the list. */
   requiredTiers?: TierKey[];
@@ -71,7 +71,7 @@ export const NAV_SECTIONS: NavSection[] = [
     // Practice Settings. Server-side every authenticated user reaches the
     // /clinic/settings/* routes (see plans/clinical-shield-v1/R2-PLAN.md
     // access matrix). Hiding the link is presentation-only.
-    allowedProductRoles: ['admin'],
+    allowedProductRoles: ['practice_owner'],
     items: [
       { label: 'Practice info', path: '/clinic/settings/practice',    iconName: 'Business' },
       { label: 'Compliance',    path: '/clinic/settings/compliance',  iconName: 'HealthAndSafety' },

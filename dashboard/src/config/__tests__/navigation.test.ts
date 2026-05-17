@@ -100,15 +100,23 @@ describe('getNavForUserAndTier — enterprise tier is unchanged', () => {
 });
 
 describe('getNavForUserAndTier — explicit productRole override', () => {
-  it('forcing productRole=staff on clinic_basic hides Practice Settings even for an admin backend role', () => {
-    const sections = getNavForUserAndTier(UserRole.ADMIN, 'clinic_basic', 'staff')
-      .map((s) => s.section);
+  it('forcing productRole=practice_staff on clinic_basic hides Practice Settings even for an admin backend role', () => {
+    // Review HIGH #5 — projected literal renamed from 'staff'.
+    const sections = getNavForUserAndTier(
+      UserRole.ADMIN,
+      'clinic_basic',
+      'practice_staff',
+    ).map((s) => s.section);
     expect(sections).not.toContain('Practice Settings');
   });
 
-  it("forcing productRole='admin' on clinic_basic shows Practice Settings for a staff backend role", () => {
-    const sections = getNavForUserAndTier(UserRole.CMIO, 'clinic_basic', 'admin')
-      .map((s) => s.section);
+  it("forcing productRole='practice_owner' on clinic_basic shows Practice Settings for a staff backend role", () => {
+    // Review HIGH #5 — projected literal renamed from 'admin'.
+    const sections = getNavForUserAndTier(
+      UserRole.CMIO,
+      'clinic_basic',
+      'practice_owner',
+    ).map((s) => s.section);
     expect(sections).toContain('Practice Settings');
   });
 });

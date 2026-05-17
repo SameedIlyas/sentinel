@@ -46,8 +46,9 @@ describe('ToolEditor — training-status admin gate (PRD §6.8.2)', () => {
     vi.clearAllMocks();
   });
 
-  it('disables the Verified option for non-admin (staff)', async () => {
-    mockUseAuth.mockReturnValue({ productRole: 'staff' });
+  it('disables the Verified option for non-admin (practice_staff)', async () => {
+    // Review HIGH #5 — projected literal renamed from 'staff'.
+    mockUseAuth.mockReturnValue({ productRole: 'practice_staff' });
     setupApi(true);
     render(wrap(<ToolEditor />));
     await waitFor(() => {
@@ -57,8 +58,9 @@ describe('ToolEditor — training-status admin gate (PRD §6.8.2)', () => {
     });
   });
 
-  it('omits the admin-only helper text when productRole is admin', async () => {
-    mockUseAuth.mockReturnValue({ productRole: 'admin' });
+  it('omits the admin-only helper text when productRole is practice_owner', async () => {
+    // Review HIGH #5 — projected literal renamed from 'admin'.
+    mockUseAuth.mockReturnValue({ productRole: 'practice_owner' });
     setupApi(true);
     render(wrap(<ToolEditor />));
     await waitFor(() =>
@@ -67,7 +69,7 @@ describe('ToolEditor — training-status admin gate (PRD §6.8.2)', () => {
   });
 
   it('shows the warning_no_baa banner when status is trains_on_customer_data + no BAA', async () => {
-    mockUseAuth.mockReturnValue({ productRole: 'admin' });
+    mockUseAuth.mockReturnValue({ productRole: 'practice_owner' });
     setupApi(false);
     render(wrap(<ToolEditor />));
     // Wait for the form to render (the "Vendor" field is unique).
