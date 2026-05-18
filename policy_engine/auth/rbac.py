@@ -89,6 +89,18 @@ def authenticate_request(
     if credentials is not None:
         payload = decode_access_token(credentials.credentials)
         if payload and payload.get("user_id"):
+            # Mirror the blacklist check from get_current_user — logout must
+            # invalidate the token across every dependency, not just the routes
+            # that use get_current_user. See CRIT-007 in REVIEW.md.
+            jti = payload.get("jti")
+            if jti:
+                from policy_engine.services.token_blacklist import get_token_blacklist
+                if get_token_blacklist().is_blacklisted(jti):
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Token has been revoked",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
             user = db.query(User).filter(User.id == payload["user_id"]).first()
             if user and user.is_active:
                 return user.id
