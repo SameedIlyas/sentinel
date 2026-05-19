@@ -46,6 +46,7 @@ def _make_log(
         log_metadata={},
         timestamp=datetime.utcnow() - timedelta(days=days_old),
         legal_hold=legal_hold,
+        organization_id="probe-org",
     )
 
 
@@ -203,6 +204,7 @@ class TestAlertCascadeOnPurge:
             description="probe",
             audit_log_id=parent.id,
             acknowledged=False,
+            organization_id="probe-org",
         )
         db_session.add(alert)
         db_session.commit()

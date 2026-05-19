@@ -19,7 +19,7 @@ class BiasAuditModel(Base):
     audit_name = Column(String, nullable=False)
     status = Column(String, default="pending", nullable=False)
     dataset_description = Column(String, nullable=True)
-    organization_id = Column(String, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True)
+    organization_id = Column(String, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=False, index=True)
     created_by = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     completed_at = Column(DateTime, nullable=True)

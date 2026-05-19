@@ -11,7 +11,7 @@ class RiskScore(Base):
     id = Column(String, primary_key=True, index=True)
     organization_id = Column(
         String, ForeignKey("organizations.id", ondelete="SET NULL"),
-        nullable=True, index=True,
+        nullable=False, index=True,
     )
     model_id = Column(String, nullable=False, index=True)
     agent_id = Column(String, nullable=True, index=True)

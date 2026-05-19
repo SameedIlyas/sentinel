@@ -46,7 +46,7 @@ class ModelCard(Base):
     monitoring_plan = Column(JSON, default=dict, nullable=False)      # {drift_baseline_id, cadence, owner}
     pccp = Column(JSON, default=dict, nullable=False)                  # Predetermined Change Control Plan
 
-    organization_id = Column(String, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True)
+    organization_id = Column(String, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=False, index=True)
     created_by = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

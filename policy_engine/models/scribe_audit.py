@@ -16,7 +16,7 @@ class ScribeAuditModel(Base):
     completeness_score = Column(Float, default=0.0, nullable=False)
     attribution_score = Column(Float, default=100.0, nullable=False)
     status = Column(String, default="pending", nullable=False)
-    organization_id = Column(String, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True)
+    organization_id = Column(String, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=False, index=True)
     audited_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     completed_at = Column(DateTime, nullable=True)

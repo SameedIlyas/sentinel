@@ -59,6 +59,6 @@ class Alert(Base):
     organization_id = Column(
         String,
         ForeignKey("organizations.id", ondelete="SET NULL"),
-        nullable=True,
+        nullable=False,
         index=True,
     )

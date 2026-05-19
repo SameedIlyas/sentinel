@@ -19,7 +19,12 @@ from policy_engine.models.audit_log import AuditLog
 # ---------------------------------------------------------------------------
 
 def _make_audit_log(log_id: str, days_old: int = 400) -> AuditLog:
-    """Return an unsaved AuditLog ORM object."""
+    """Return an unsaved AuditLog ORM object.
+
+    organization_id is NOT NULL after migration 020 (CRIT-010) — every
+    helper sets a probe tenant so the row can be inserted. The retention
+    tests do not exercise scope, so a single fixed sentinel is fine.
+    """
     return AuditLog(
         id=log_id,
         agent_id="agent-archive-test",
@@ -34,6 +39,7 @@ def _make_audit_log(log_id: str, days_old: int = 400) -> AuditLog:
         reason="Allowed by policy",
         log_metadata={},
         timestamp=datetime.utcnow() - timedelta(days=days_old),
+        organization_id="probe-org",
     )
 
 

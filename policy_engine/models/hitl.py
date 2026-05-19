@@ -31,7 +31,7 @@ class HITLReview(Base):
     priority = Column(String, default="medium", nullable=False)
     assigned_to = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     sla_deadline = Column(DateTime, nullable=True)
-    organization_id = Column(String, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True)
+    organization_id = Column(String, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=False, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

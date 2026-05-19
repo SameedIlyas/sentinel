@@ -18,7 +18,7 @@ class ShadowAIDetectionModel(Base):
     phi_risk_level = Column(String, default="none", nullable=False)
     status = Column(String, default="detected", nullable=False)
     notes = Column(String, nullable=True)
-    organization_id = Column(String, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True)
+    organization_id = Column(String, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=False, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 

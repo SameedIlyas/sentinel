@@ -21,7 +21,7 @@ class RevenueCycleAudit(Base):
     status = Column(String, default="clean", nullable=False)
     reviewed_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     reviewed_at = Column(DateTime, nullable=True)
-    organization_id = Column(String, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True)
+    organization_id = Column(String, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=False, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

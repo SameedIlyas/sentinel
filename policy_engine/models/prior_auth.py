@@ -23,14 +23,14 @@ class PriorAuthRecord(Base):
     override_reason = Column(String, nullable=True)
     prev_record_hash = Column(String, nullable=False, default="")
     record_hash = Column(String, nullable=False)
-    organization_id = Column(String, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True)
+    organization_id = Column(String, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=False, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
 class PriorAuthChainStatus(Base):
     __tablename__ = "prior_auth_chain_status"
     id = Column(String, primary_key=True, index=True)
-    organization_id = Column(String, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True)
+    organization_id = Column(String, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=False, index=True)
     last_verified_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     total_records = Column(Integer, default=0, nullable=False)
     chain_valid = Column(Boolean, default=True, nullable=False)

@@ -52,7 +52,7 @@ class AuditLog(Base):
     policy_ids = Column(JSON, nullable=False)
     reason = Column(String, nullable=False)
     log_metadata = Column('metadata', JSON, default=dict, nullable=False)
-    organization_id = Column(String, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True)
+    organization_id = Column(String, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=False, index=True)
     # CRIT-008 — exempt the row from retention purge when True.
     legal_hold = Column(
         Boolean, nullable=False, default=False, server_default="0", index=True

@@ -20,8 +20,14 @@ from policy_engine.services.slack_service import SlackService
 def _make_alert(db_session, *, agent_id="agent-alert-test",
                 alert_type="blocked_access",
                 severity=AlertSeverity.HIGH,
-                minutes_ago: int = 0) -> Alert:
-    """Insert a pre-existing Alert directly into the DB."""
+                minutes_ago: int = 0,
+                organization_id: str = "probe-org") -> Alert:
+    """Insert a pre-existing Alert directly into the DB.
+
+    ``organization_id`` is NOT NULL after CRIT-010 — every helper sets a
+    sentinel tenant so the row can be inserted. The service tests do
+    not exercise scope, so a single fixed sentinel is fine.
+    """
     ts = datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)
     alert = Alert(
         id=str(uuid.uuid4()),
@@ -31,6 +37,7 @@ def _make_alert(db_session, *, agent_id="agent-alert-test",
         agent_id=agent_id,
         description="Test alert",
         acknowledged=False,
+        organization_id=organization_id,
     )
     db_session.add(alert)
     db_session.commit()
@@ -49,6 +56,7 @@ def test_create_alert_persists_to_db(db_session):
         alert_type="blocked_access",
         agent_id="agent-persist-test",
         description="Tool was blocked",
+        organization_id="probe-org",
     )
     assert alert is not None
     assert alert.id is not None
@@ -69,6 +77,7 @@ def test_create_alert_returns_none_when_dedup_fires(db_session):
         agent_id="agent-dup",
         description="Second identical alert",
         auto_deduplicate=True,
+        organization_id="probe-org",
     )
     assert result is None
 
@@ -88,6 +97,7 @@ def test_deduplication_returns_none_within_window(db_session):
         alert_type="blocked_access",
         agent_id="agent-time-test",
         description="Should be deduped",
+        organization_id="probe-org",
     )
     assert result is None
 
@@ -104,6 +114,7 @@ def test_deduplication_creates_new_alert_after_window(db_session):
         alert_type="blocked_access",
         agent_id="agent-outside-window",
         description="Should be a new alert",
+        organization_id="probe-org",
     )
     assert result is not None
 
@@ -120,6 +131,7 @@ def test_deduplication_disabled_always_creates(db_session):
         agent_id="agent-no-dedup",
         description="No dedup",
         auto_deduplicate=False,
+        organization_id="probe-org",
     )
     assert result is not None
 
