@@ -13,6 +13,7 @@ from policy_engine.middleware.rate_limiter import RateLimitMiddleware
 from policy_engine.middleware.csrf import CSRFMiddleware
 from policy_engine.middleware.tenant_context import TenantContextMiddleware
 from policy_engine.routes import health, agents, policies, policy_check, audit, alerts, auth, users, dashboard, websocket, cache, organizations
+from policy_engine.routes import ws_ticket
 from policy_engine.routes import phi
 from policy_engine.routes.clinical import model_cards as clinical_model_cards
 from policy_engine.routes.clinical import bias_audits as clinical_bias_audits
@@ -96,6 +97,13 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("CORS_ALLOW_ALL_ORIGINS=True is not allowed in production")
     if "*" in settings.CORS_ORIGINS:
         logger.warning("CORS_ORIGINS contains wildcard '*' — this allows all origins")
+
+    # CRIT-013 — production must not boot on the in-memory WS ticket
+    # fallback (it doesn't span replicas, so tickets minted on one pod
+    # cannot be consumed on another).
+    from policy_engine.services.ws_ticket_store import ensure_production_safe
+    ensure_production_safe()
+
     logger.info("Starting Policy Engine service...")
 
     # ── Tier 2 Sprint 2-5: register periodic background jobs ────────────────
@@ -217,6 +225,7 @@ app.include_router(auth.router, prefix="/v1/auth", tags=["authentication"])
 app.include_router(users.router, prefix="/v1/users", tags=["users"])
 app.include_router(dashboard.router, prefix="/v1/dashboard", tags=["dashboard"])
 app.include_router(websocket.router, tags=["websocket"])  # WebSocket doesn't use prefix
+app.include_router(ws_ticket.router, prefix="/v1", tags=["websocket"])  # CRIT-013
 app.include_router(agents.router, prefix="/v1/agents", tags=["agents"])
 app.include_router(policies.router, prefix="/v1/policies", tags=["policies"])
 app.include_router(policy_check.router, prefix="/v1/policy", tags=["policy-evaluation"])

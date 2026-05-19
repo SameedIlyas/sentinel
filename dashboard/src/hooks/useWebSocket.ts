@@ -17,10 +17,50 @@ export interface UseWebSocketOptions {
 }
 
 /**
- * Custom hook for WebSocket connection
- * Automatically handles reconnection and connection management
+ * Build a fresh single-use WebSocket ticket by calling /v1/ws/ticket
+ * with the JWT in the Authorization header. CRIT-013: the JWT must
+ * never appear in the WebSocket URL. The returned ticket is short-lived
+ * (~30s) and consumed on first use by the server.
  */
-export const useWebSocket = (url: string, options: UseWebSocketOptions = {}) => {
+async function fetchWsTicket(): Promise<string | null> {
+  const apiBase =
+    (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:8000';
+  const token = localStorage.getItem('access_token');
+  if (!token) return null;
+  try {
+    const r = await fetch(`${apiBase.replace(/\/$/, '')}/v1/ws/ticket`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    if (!r.ok) return null;
+    const body = (await r.json()) as { ticket?: string };
+    return body.ticket ?? null;
+  } catch (_e) {
+    return null;
+  }
+}
+
+function wsBaseUrl(): string {
+  const apiBase =
+    (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:8000';
+  return apiBase.replace(/^http/i, 'ws').replace(/\/$/, '');
+}
+
+/**
+ * Custom hook for WebSocket connection.
+ *
+ * Each (re)connection fetches a fresh single-use ticket from the server
+ * and opens the socket with ``?ticket=<id>``. The JWT in localStorage is
+ * still the underlying credential but it's only ever sent in an
+ * Authorization HEADER, never the URL (CRIT-013).
+ */
+export const useWebSocket = (
+  path: string,
+  options: UseWebSocketOptions = {}
+) => {
   const {
     onMessage,
     onError,
@@ -51,18 +91,26 @@ export const useWebSocket = (url: string, options: UseWebSocketOptions = {}) => 
     onCloseRef.current = onClose;
   }, [onMessage, onError, onOpen, onClose]);
 
-  const connect = useCallback(() => {
+  const connect = useCallback(async () => {
     try {
-      // Close existing connection if any
       if (wsRef.current) {
         wsRef.current.close();
       }
 
+      const ticket = await fetchWsTicket();
+      if (!ticket) {
+        // No authenticated session — refuse to open the socket so the
+        // server never sees a malformed handshake.
+        setIsConnected(false);
+        return;
+      }
+
+      const url = `${wsBaseUrl()}${path}?ticket=${encodeURIComponent(ticket)}`;
       const ws = new WebSocket(url);
       wsRef.current = ws;
 
       ws.onopen = (event) => {
-        console.log('WebSocket connected:', url);
+        console.log('WebSocket connected:', path);
         setIsConnected(true);
         reconnectCountRef.current = 0;
         if (onOpenRef.current) onOpenRef.current(event);
@@ -89,14 +137,19 @@ export const useWebSocket = (url: string, options: UseWebSocketOptions = {}) => 
         wsRef.current = null;
         if (onCloseRef.current) onCloseRef.current(event);
 
-        // Attempt to reconnect
+        // Server signals an unrecoverable auth problem with 4401 — don't
+        // burn reconnects trying again until the user re-authenticates.
+        if (event.code === 4401) {
+          return;
+        }
+
         if (reconnectCountRef.current < reconnectAttempts) {
           reconnectCountRef.current += 1;
           console.log(
             `Reconnecting... (${reconnectCountRef.current}/${reconnectAttempts})`
           );
           reconnectTimeoutRef.current = window.setTimeout(() => {
-            connect();
+            void connect();
           }, reconnectInterval) as unknown as number;
         } else {
           console.error('Max reconnection attempts reached');
@@ -105,7 +158,7 @@ export const useWebSocket = (url: string, options: UseWebSocketOptions = {}) => 
     } catch (error) {
       console.error('Error creating WebSocket connection:', error);
     }
-  }, [url, reconnectInterval, reconnectAttempts]);
+  }, [path, reconnectInterval, reconnectAttempts]);
 
   const disconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
@@ -128,7 +181,7 @@ export const useWebSocket = (url: string, options: UseWebSocketOptions = {}) => 
   }, []);
 
   useEffect(() => {
-    connect();
+    void connect();
 
     return () => {
       disconnect();
@@ -145,41 +198,24 @@ export const useWebSocket = (url: string, options: UseWebSocketOptions = {}) => 
 };
 
 /**
- * Build a WebSocket URL relative to the configured API base, appending the
- * JWT from localStorage as a query string parameter so the backend
- * `_authenticate_ws_token` check can validate the connection. Falls back
- * to localhost:8000 when VITE_API_BASE_URL is unset (dev default).
- */
-function buildWsUrl(path: string): string {
-  const apiBase = (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:8000';
-  const wsBase = apiBase.replace(/^http/i, 'ws').replace(/\/$/, '');
-  const token = localStorage.getItem('access_token') || '';
-  const qs = token ? `?token=${encodeURIComponent(token)}` : '';
-  return `${wsBase}${path}${qs}`;
-}
-
-/**
  * Hook specifically for dashboard metrics WebSocket
  */
 export const useDashboardWebSocket = (
   onMetricsUpdate: (metrics: any) => void,
   enabled = true
 ) => {
-  const wsUrl = buildWsUrl('/ws/dashboard');
-
   const handleMessage = useCallback(
     (message: WebSocketMessage) => {
       if (message.type === 'metrics_update' && message.data) {
         onMetricsUpdate(message.data);
       } else if (message.type === 'refresh_request') {
-        // Server is requesting a refresh
         console.log('Server requested metrics refresh');
       }
     },
     [onMetricsUpdate]
   );
 
-  const { isConnected, lastMessage } = useWebSocket(wsUrl, {
+  const { isConnected, lastMessage } = useWebSocket('/ws/dashboard', {
     onMessage: enabled ? handleMessage : undefined,
     onError: (error) => {
       console.error('Dashboard WebSocket error:', error);
@@ -205,8 +241,6 @@ export const useEventsWebSocket = (
   onEvent: (eventType: string, data: any) => void,
   enabled = true
 ) => {
-  const wsUrl = buildWsUrl('/ws/events');
-
   const handleMessage = useCallback(
     (message: WebSocketMessage) => {
       if (message.type === 'event' && message.event_type && message.data) {
@@ -218,7 +252,7 @@ export const useEventsWebSocket = (
     [onEvent]
   );
 
-  const { isConnected, lastMessage } = useWebSocket(wsUrl, {
+  const { isConnected, lastMessage } = useWebSocket('/ws/events', {
     onMessage: enabled ? handleMessage : undefined,
     onError: (error) => {
       console.error('Events WebSocket error:', error);
