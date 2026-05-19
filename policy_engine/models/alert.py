@@ -45,7 +45,14 @@ class Alert(Base):
     alert_type = Column(String, nullable=False, index=True)
     agent_id = Column(String, nullable=False, index=True)
     description = Column(String, nullable=False)
-    audit_log_id = Column(String, nullable=True)
+    # CRIT-008 — real FK with ON DELETE SET NULL so a retention sweep
+    # never leaves dangling string pointers when the parent audit row is
+    # purged.
+    audit_log_id = Column(
+        String,
+        ForeignKey("audit_logs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     acknowledged = Column(Boolean, default=False, nullable=False)
     acknowledged_by = Column(String, nullable=True)
     acknowledged_at = Column(DateTime, nullable=True)

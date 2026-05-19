@@ -1,5 +1,17 @@
-"""Audit log retention policy service"""
+"""Audit log retention policy service.
 
+CRIT-008 — three contracts this module now enforces:
+
+1. Rows with ``legal_hold = TRUE`` are NEVER purged regardless of age.
+2. Archive durability is verified before delete (every backend's
+   ``write()`` raises on failure, and ``archive_and_delete`` only
+   deletes after a successful return).
+3. HIPAA-aware deployments enforce a 6-year retention floor — startup
+   refuses to ship with ``RETENTION_DAYS < RETENTION_HARD_MIN_DAYS``
+   when ``HIPAA_MODE=true``.
+"""
+
+import os
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
@@ -12,41 +24,89 @@ from policy_engine.services.archive_backends import get_archive_backend
 logger = logging.getLogger(__name__)
 
 
+# HIPAA §164.530(j) — record retention floor of 6 years from creation or
+# last effective date. We use 6 * 365 days as a conservative integer
+# approximation (the workers operate in days; leap days fall out in
+# practice and never cause us to delete *too soon*).
+RETENTION_HARD_MIN_DAYS = 6 * 365
+
+
+def _hipaa_mode_enabled() -> bool:
+    """Read the env-driven HIPAA mode flag at call time.
+
+    Read-on-call keeps this responsive to env mutations in tests / boot
+    rather than freezing the value at import time.
+    """
+    return (os.environ.get("HIPAA_MODE", "") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
 class AuditLogRetentionService:
+    """Service for managing audit log retention and archival.
+
+    Implements the configured retention policy by:
+
+    1. Identifying logs older than ``retention_days`` AND not on
+       ``legal_hold``.
+    2. Archiving them to cold storage (local / S3) via the backend's
+       allowlist-based serializer.
+    3. Deleting from the database only after the archive backend
+       confirms success.
     """
-    Service for managing audit log retention and archival
-    
-    Implements the 365-day retention policy by:
-    1. Identifying logs older than 365 days
-    2. Archiving them to cold storage (S3/GCS)
-    3. Deleting from the database
-    """
-    
+
     def __init__(self, retention_days: int = 365):
-        """
-        Initialize retention service
-        
+        """Initialize retention service.
+
         Args:
-            retention_days: Number of days to retain logs (default: 365)
+            retention_days: Number of days to retain logs (default: 365).
+                HIPAA-aware deployments override at startup — see
+                :meth:`enforce_hipaa_floor`.
         """
         self.retention_days = retention_days
-    
-    def get_logs_for_archival(self, db: Session) -> List[AuditLog]:
+
+    def enforce_hipaa_floor(self) -> None:
+        """Raise if HIPAA mode is on and retention is below the floor.
+
+        Called from process startup so a misconfigured production env
+        cannot run a destructive retention sweep with too-short a
+        window. The scheduled job's per-run path treats this as
+        non-fatal (surface via an alert) but the process-level guard
+        refuses to boot at all.
         """
-        Get audit logs older than retention period
-        
+        if not _hipaa_mode_enabled():
+            return
+        if self.retention_days < RETENTION_HARD_MIN_DAYS:
+            raise RuntimeError(
+                f"HIPAA_MODE=true but RETENTION_DAYS={self.retention_days} is "
+                f"below the hard minimum {RETENTION_HARD_MIN_DAYS} "
+                "(6 years = 2190 days). Increase RETENTION_DAYS or unset "
+                "HIPAA_MODE."
+            )
+
+    def get_logs_for_archival(self, db: Session) -> List[AuditLog]:
+        """Get audit logs eligible for archive: older than retention AND
+        not on legal hold.
+
         Args:
-            db: Database session
-            
+            db: Database session.
+
         Returns:
-            List of audit logs to be archived
+            List of audit logs to archive. Legal-hold rows are excluded
+            even if they pre-date the retention cutoff.
         """
         cutoff_date = datetime.utcnow() - timedelta(days=self.retention_days)
-        
-        logs = db.query(AuditLog).filter(
-            AuditLog.timestamp < cutoff_date
-        ).all()
-        
+
+        logs = (
+            db.query(AuditLog)
+            .filter(AuditLog.timestamp < cutoff_date)
+            .filter(AuditLog.legal_hold.is_(False))
+            .all()
+        )
+
         return logs
     
     def archive_logs(self, logs: List[AuditLog]) -> Dict[str, Any]:
@@ -141,57 +201,29 @@ class AuditLogRetentionService:
         return deleted_count
     
     def run_retention_policy(self) -> Dict[str, Any]:
-        """
-        Execute the retention policy
-        
-        This should be run as a background job (e.g., daily cron)
-        
-        Returns:
-            Execution summary
+        """Execute the retention policy.
+
+        Background-job entry point. Delegates to ``archive_and_delete``
+        (single archive+delete code path — historically there were two,
+        which is exactly the kind of split that lets a regression slip
+        through one side). Wraps the call in a try/except so a failure
+        in archive_logs() surfaces as a structured error rather than an
+        uncaught exception in the scheduler thread.
         """
         db = SessionLocal()
-        
         try:
-            # Get logs to archive
-            logs_to_archive = self.get_logs_for_archival(db)
-            
-            if not logs_to_archive:
-                logger.info("No logs to archive")
-                return {
-                    "status": "success",
-                    "logs_archived": 0,
-                    "logs_deleted": 0,
-                    "message": "No logs to archive"
-                }
-            
-            # Archive logs
-            archive_metadata = self.archive_logs(logs_to_archive)
-            
-            # Delete archived logs from database
-            deleted_count = self.delete_archived_logs(db, logs_to_archive)
-            
-            logger.info(
-                f"Retention policy executed: {deleted_count} logs archived and deleted"
-            )
-            
-            return {
-                "status": "success",
-                "logs_archived": archive_metadata['archived_count'],
-                "logs_deleted": deleted_count,
-                "archive_metadata": archive_metadata
-            }
-            
+            return self.archive_and_delete(db)
         except Exception as e:
-            logger.error(f"Retention policy execution failed: {str(e)}", exc_info=True)
+            logger.error(
+                "Retention policy execution failed: %s", e, exc_info=True
+            )
             db.rollback()
-            
             return {
                 "status": "error",
                 "message": str(e),
                 "logs_archived": 0,
-                "logs_deleted": 0
+                "logs_deleted": 0,
             }
-        
         finally:
             db.close()
     

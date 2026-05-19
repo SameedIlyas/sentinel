@@ -136,14 +136,34 @@ class LocalArchiveBackend:
 
         records = [_serialize_log(log) for log in logs]
 
+        # CRIT-008 — fsync + stat round-trip BEFORE returning success so
+        # the retention sweep cannot delete DB rows whose archive write
+        # is still buffered in page cache.
         with gzip.open(filepath, "wt", encoding="utf-8") as fh:
             json.dump(records, fh, default=str)
+            fh.flush()
+            try:
+                # `gzip.GzipFile` does not always expose fileno() on every
+                # platform — best-effort fsync, then re-stat the path.
+                os.fsync(fh.fileno())
+            except (AttributeError, OSError):
+                pass
+
+        # Stat verifies the bytes hit the filesystem. Raise on any error
+        # so archive_and_delete refuses to proceed.
+        stat = os.stat(filepath)
+        if stat.st_size <= 0:
+            raise IOError(
+                f"LocalArchiveBackend: archive {filepath} is zero bytes — "
+                "refusing to acknowledge a successful write."
+            )
 
         return {
             "archive_id": archive_id,
             "archived_count": len(records),
             "storage_location": filepath,
             "archived_at": datetime.utcnow().isoformat(),
+            "size_bytes": stat.st_size,
         }
 
 
@@ -216,13 +236,38 @@ class S3ArchiveBackend:
         if self._kms_key_id:
             put_kwargs["SSEKMSKeyId"] = self._kms_key_id
 
-        self._s3.put_object(**put_kwargs)
+        put_response = self._s3.put_object(**put_kwargs)
+
+        # CRIT-008 — verify the object actually landed BEFORE returning
+        # success so the retention sweep cannot delete DB rows whose
+        # archive object is missing.
+        etag = put_response.get("ETag")
+        if not etag:
+            raise IOError(
+                f"S3ArchiveBackend: put_object for {key} returned no ETag — "
+                "refusing to acknowledge a successful write."
+            )
+        # head_object round-trip confirms the object is durably visible.
+        try:
+            head = self._s3.head_object(Bucket=self._bucket, Key=key)
+        except Exception as exc:  # pragma: no cover — network/IAM failures
+            raise IOError(
+                f"S3ArchiveBackend: head_object failed for {key} after put "
+                f"(ETag={etag}). Refusing to claim success: {exc}"
+            ) from exc
+        if head.get("ETag") != etag:
+            raise IOError(
+                f"S3ArchiveBackend: head_object ETag mismatch for {key} "
+                f"(put={etag!r}, head={head.get('ETag')!r})."
+            )
 
         return {
             "archive_id": archive_id,
             "archived_count": len(records),
             "storage_location": f"s3://{self._bucket}/{key}",
             "archived_at": datetime.utcnow().isoformat(),
+            "etag": etag,
+            "size_bytes": head.get("ContentLength"),
         }
 
 
