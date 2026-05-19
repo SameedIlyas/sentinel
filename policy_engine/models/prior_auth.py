@@ -1,5 +1,15 @@
 """Prior Authorization SQLAlchemy models — append-only."""
-from sqlalchemy import Column, String, DateTime, Float, ForeignKey, Boolean, Integer
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+)
 from datetime import datetime
 from policy_engine.database import Base
 
@@ -23,8 +33,23 @@ class PriorAuthRecord(Base):
     override_reason = Column(String, nullable=True)
     prev_record_hash = Column(String, nullable=False, default="")
     record_hash = Column(String, nullable=False)
-    organization_id = Column(String, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=False, index=True)
+    organization_id = Column(
+        String,
+        ForeignKey("organizations.id", ondelete="SET NULL"),
+        nullable=False,
+        index=True,
+    )
+    # CRIT-005 — monotonic per-org sequence so verify_chain can detect
+    # tail deletions (gap between max(seq_no) and len(records)) and the
+    # hash binds the row to its position in the chain.
+    seq_no = Column(BigInteger, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "seq_no", name="uq_prior_auth_org_seq"
+        ),
+    )
 
 
 class PriorAuthChainStatus(Base):

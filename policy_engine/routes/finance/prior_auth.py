@@ -47,16 +47,24 @@ def create_prior_auth(
     # Hash patient_id — NEVER store raw
     patient_id_hash = hashlib.sha256(body.patient_id.encode()).hexdigest()
 
-    # Fetch last record for chain
-    last = (db.query(PriorAuthRecord)
-            .filter(PriorAuthRecord.organization_id == current_user.organization_id)
-            .order_by(PriorAuthRecord.created_at.desc())
-            .first())
+    # Fetch last record for chain. CRIT-005 — order by seq_no (the
+    # monotonic per-org sequence) so we always extend the actual tail
+    # rather than relying on created_at, which can collide under load.
+    last = (
+        db.query(PriorAuthRecord)
+        .filter(PriorAuthRecord.organization_id == current_user.organization_id)
+        .order_by(PriorAuthRecord.seq_no.desc())
+        .first()
+    )
     prev_record_hash = last.record_hash if last else ""
+    next_seq_no = (last.seq_no + 1) if last and last.seq_no is not None else 1
 
     now = datetime.utcnow()
     record_id = str(uuid.uuid4())
 
+    # CRIT-005 — seq_no is part of the hashed payload so the hash binds
+    # the row to its position in the chain. Removing rows from the tail
+    # of the chain now produces a seq_no gap the verifier surfaces.
     record_data = {
         "patient_id_hash": patient_id_hash,
         "claim_id": body.claim_id,
@@ -67,6 +75,7 @@ def create_prior_auth(
         "denial_reason_code": body.denial_reason_code or "",
         "human_reviewer_id": body.human_reviewer_id or "",
         "created_at": now.isoformat(),
+        "seq_no": next_seq_no,
     }
     record_hash = compute_record_hash(record_data, prev_record_hash)
 
@@ -87,6 +96,7 @@ def create_prior_auth(
         prev_record_hash=prev_record_hash,
         record_hash=record_hash,
         organization_id=current_user.organization_id,
+        seq_no=next_seq_no,
         created_at=now,
     )
     db.add(record)
@@ -117,10 +127,15 @@ def verify_prior_auth_chain(
         raise HTTPException(403, "Forbidden")
 
     start = time.time()
-    records_db = (db.query(PriorAuthRecord)
-                  .filter(PriorAuthRecord.organization_id == current_user.organization_id)
-                  .order_by(PriorAuthRecord.created_at.asc())
-                  .all())
+    # CRIT-005 — order by seq_no (monotonic per-org) so the verifier
+    # walks the canonical chain. created_at can produce ties under load
+    # that flip the chain order.
+    records_db = (
+        db.query(PriorAuthRecord)
+        .filter(PriorAuthRecord.organization_id == current_user.organization_id)
+        .order_by(PriorAuthRecord.seq_no.asc())
+        .all()
+    )
 
     records = [{
         "id": r.id,
@@ -134,11 +149,27 @@ def verify_prior_auth_chain(
             "denial_reason_code": r.denial_reason_code or "",
             "human_reviewer_id": r.human_reviewer_id or "",
             "created_at": r.created_at.isoformat() if r.created_at else "",
+            "seq_no": r.seq_no,
         },
         "record_hash": r.record_hash,
     } for r in records_db]
 
-    chain_valid, broken_at = verify_chain(records)
+    # CRIT-005 — compare current count against the last recorded
+    # total_records. A regression means the tail was deleted between
+    # verifications.
+    prev_status = (
+        db.query(PriorAuthChainStatus)
+        .filter(
+            PriorAuthChainStatus.organization_id == current_user.organization_id
+        )
+        .order_by(PriorAuthChainStatus.last_verified_at.desc())
+        .first()
+    )
+    expected_count = (
+        prev_status.total_records if prev_status is not None else None
+    )
+
+    chain_valid, broken_at = verify_chain(records, expected_count=expected_count)
     duration_ms = int((time.time() - start) * 1000)
     now = datetime.utcnow()
 
