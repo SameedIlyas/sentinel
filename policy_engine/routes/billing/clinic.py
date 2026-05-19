@@ -51,6 +51,10 @@ from policy_engine.models.organization import (
     TIER_CLINIC_STANDARD,
 )
 from policy_engine.models.user import User
+from policy_engine.billing.tier_resolver import (
+    resolve_tier,
+    should_apply_tier,
+)
 from policy_engine.services.tier_filter import require_clinic_tier
 
 logger = logging.getLogger(__name__)
@@ -319,6 +323,13 @@ def _handle_checkout_completed(db: Session, event: dict, event_id: str) -> Handl
 
 
 def _handle_subscription_updated(db: Session, event: dict, event_id: str) -> HandlerResult:
+    """Handle customer.subscription.{created,updated}.
+
+    CRIT-006 — also propagate tier from subscription plan metadata when
+    the subscription is in an active-paying state. Without this, a
+    customer who subscribed via the Stripe Customer Portal (which never
+    fires checkout.session.completed) ended up with the wrong tier.
+    """
     sub = (event.get("data") or {}).get("object") or {}
     org = _resolve_org_by_customer(db, sub.get("customer"))
     if not org:
@@ -327,6 +338,21 @@ def _handle_subscription_updated(db: Session, event: dict, event_id: str) -> Han
     cancel_at_period_end = bool(sub.get("cancel_at_period_end"))
     period_end = sub.get("current_period_end")  # epoch seconds
     cancel_at = sub.get("cancel_at")
+
+    # CRIT-006: propagate tier when paying and a new tier is resolvable.
+    # Lifecycle paths (canceled / past_due / unpaid) keep tier read
+    # access until the subscription_lifecycle worker reverts after grace.
+    resolved_tier = resolve_tier(sub) if should_apply_tier(status) else None
+    if resolved_tier is not None and resolved_tier != org.tier:
+        logger.info(
+            "billing: subscription event %s flipping org=%s tier %s -> %s",
+            event_id,
+            org.id,
+            org.tier,
+            resolved_tier,
+        )
+        org.tier = resolved_tier
+
     _set_billing(
         org,
         stripe_subscription_id=sub.get("id"),
@@ -334,6 +360,7 @@ def _handle_subscription_updated(db: Session, event: dict, event_id: str) -> Han
         cancel_at_period_end=cancel_at_period_end,
         current_period_end=period_end,
         cancel_at=cancel_at,
+        plan=resolved_tier if resolved_tier is not None else None,
         last_event_id=event_id,
     )
     return ("processed", org.id, None)
