@@ -1,5 +1,6 @@
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { LoginRequest, TokenResponse, User } from '@/types';
+import { parseUser } from '@/types/userSchema';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
@@ -91,19 +92,30 @@ class ApiClient {
   }
 
   private getUser(): User | null {
-    // HIGH-025 — A corrupt localStorage entry (browser quota error, manual
-    // edit, third-party-extension interference) used to throw SyntaxError
-    // through every caller and silently log the user out with no error.
-    // Clear the bad entry and return null so the caller routes cleanly to
-    // the login flow on the next render.
+    // CRIT-011 — every cached value goes through a strict schema. A
+    // forged ``{role: 'system_admin'}`` written to localStorage by an
+    // attacker (or a stale entry from a previous version with a
+    // different shape) returns null here, never a partially-typed
+    // User. Callers must then take the server-validateToken path,
+    // which re-derives role/tier from the authoritative response.
+    //
+    // HIGH-025 history — also clears the corrupt entry so the next
+    // render boots into the login flow cleanly.
     const userStr = localStorage.getItem('user');
     if (!userStr) return null;
+    let raw: unknown;
     try {
-      return JSON.parse(userStr) as User;
+      raw = JSON.parse(userStr);
     } catch {
       this.clearUser();
       return null;
     }
+    const validated = parseUser(raw);
+    if (validated === null) {
+      this.clearUser();
+      return null;
+    }
+    return validated as User;
   }
 
   private setUser(user: User): void {
