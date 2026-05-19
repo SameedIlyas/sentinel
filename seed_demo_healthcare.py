@@ -92,7 +92,7 @@ def hours_ago(h: int) -> datetime:
 
 
 def get_admin_id(db) -> str:
-    admin = db.query(User).filter(User.role == UserRole.ADMIN).first()
+    admin = db.query(User).filter(User.role == UserRole.ORG_ADMIN).first()
     return admin.id if admin else "user_system"
 
 

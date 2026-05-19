@@ -220,7 +220,7 @@ def seed_users(db):
 
 def seed_agents(db):
     print("\n  Agents...")
-    admin = db.query(User).filter(User.role == UserRole.ADMIN).first()
+    admin = db.query(User).filter(User.role == UserRole.ORG_ADMIN).first()
     owner_id = admin.id if admin else "user_system"
     created = 0
     for a in DEMO_AGENTS:
@@ -280,7 +280,7 @@ def seed_api_keys(db):
 
 def seed_policies(db):
     print("\n  Policies...")
-    admin = db.query(User).filter(User.role == UserRole.ADMIN).first()
+    admin = db.query(User).filter(User.role == UserRole.ORG_ADMIN).first()
     created_by = admin.id if admin else "user_system"
     created = 0
     for p in DEMO_POLICIES:
@@ -382,7 +382,7 @@ def seed_alerts(db, count: int = 35):
     severities = list(AlertSeverity)
     severity_weights = [0.30, 0.30, 0.25, 0.15]  # low, medium, high, critical
 
-    users = db.query(User).filter(User.role.in_([UserRole.ADMIN, UserRole.ANALYST])).all()
+    users = db.query(User).filter(User.role.in_([UserRole.ORG_ADMIN, UserRole.ANALYST])).all()
     ack_users = [u.id for u in users] if users else ["user_system"]
 
     audit_logs = db.query(AuditLog).filter(AuditLog.decision == Decision.BLOCKED).limit(count).all()

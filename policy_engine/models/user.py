@@ -8,10 +8,16 @@ from policy_engine.database import Base
 
 
 class UserRole(str, enum.Enum):
-    """User role enumeration for RBAC — 8 healthcare roles."""
+    """User role enumeration for RBAC — 8 healthcare roles.
+
+    ``ORG_ADMIN`` is the canonical organisation-admin role; the legacy
+    ``ADMIN`` alias was removed in PR #5 (CRIT-009 cleanup). Callers that
+    historically used ``UserRole.ADMIN`` should use
+    :attr:`UserRole.ORG_ADMIN` — both serialise to the same DB value
+    (``"admin"``) so existing rows continue to deserialise unchanged.
+    """
     SYSTEM_ADMIN = "system_admin"
     ORG_ADMIN = "admin"          # value kept as "admin" for backward compat
-    ADMIN = "admin"              # Alias for ORG_ADMIN — backward compatibility
     CMIO = "cmio"
     DATA_SCIENTIST = "data_scientist"
     COMPLIANCE_OFFICER = "compliance_officer"

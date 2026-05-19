@@ -321,7 +321,7 @@ async def change_password(
         )
     
     # Check permissions
-    if current_user.role != UserRole.ADMIN and current_user.id != user_id:
+    if current_user.role != UserRole.ORG_ADMIN and current_user.id != user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient permissions to change password for other users"

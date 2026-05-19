@@ -84,7 +84,7 @@ def create_admin_user():
             username=username,
             email=email,
             password_hash=get_password_hash(password),
-            role=UserRole.ADMIN,
+            role=UserRole.ORG_ADMIN,
             full_name=full_name if full_name else None,
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow(),
@@ -121,7 +121,7 @@ def create_default_admin():
     
     try:
         # Check if admin already exists
-        existing_admin = db.query(User).filter(User.role == UserRole.ADMIN).first()
+        existing_admin = db.query(User).filter(User.role == UserRole.ORG_ADMIN).first()
         if existing_admin:
             print(f"Admin user already exists: {existing_admin.username}")
             return
@@ -134,7 +134,7 @@ def create_default_admin():
             username="admin",
             email="admin@sentinel.ai",
             password_hash=get_password_hash("admin123"),  # Default password
-            role=UserRole.ADMIN,
+            role=UserRole.ORG_ADMIN,
             full_name="System Administrator",
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow(),

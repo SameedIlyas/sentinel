@@ -171,7 +171,7 @@ def require_role(allowed_roles: List[UserRole]) -> Callable:
         
     Example:
         @router.get("/admin-only")
-        def admin_endpoint(user: User = Depends(require_role([UserRole.ADMIN]))):
+        def admin_endpoint(user: User = Depends(require_role([UserRole.ORG_ADMIN]))):
             ...
     """
     def role_checker(current_user: User = Depends(get_current_user)) -> User:
@@ -215,7 +215,7 @@ def require_permission(resource: str, action: str) -> Callable:
 # Convenience dependency functions
 def get_admin_user(current_user: User = Depends(get_current_user)) -> User:
     """Require admin role"""
-    if current_user.role != UserRole.ADMIN:
+    if current_user.role != UserRole.ORG_ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Administrator privileges required"
@@ -225,7 +225,7 @@ def get_admin_user(current_user: User = Depends(get_current_user)) -> User:
 
 def get_analyst_or_admin(current_user: User = Depends(get_current_user)) -> User:
     """Require analyst or admin role"""
-    if current_user.role not in [UserRole.ADMIN, UserRole.ANALYST]:
+    if current_user.role not in [UserRole.ORG_ADMIN, UserRole.ANALYST]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Analyst or administrator privileges required"

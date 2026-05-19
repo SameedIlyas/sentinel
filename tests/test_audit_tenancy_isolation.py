@@ -38,7 +38,7 @@ def _make_org(db_session, name: str) -> Organization:
 
 
 def _make_user(
-    db_session, org: Organization, role: UserRole = UserRole.ADMIN
+    db_session, org: Organization, role: UserRole = UserRole.ORG_ADMIN
 ) -> tuple[User, str]:
     u = User(
         id=str(uuid.uuid4()),
@@ -96,7 +96,7 @@ def test_audit_list_scopes_to_caller_org(db_session):
     org_a = _make_org(db_session, "org-a")
     org_b = _make_org(db_session, "org-b")
 
-    _user_a, token_a = _make_user(db_session, org_a, role=UserRole.ADMIN)
+    _user_a, token_a = _make_user(db_session, org_a, role=UserRole.ORG_ADMIN)
 
     log_a = _make_log(db_session, org_id=org_a.id, agent_id="a-1")
     log_b = _make_log(db_session, org_id=org_b.id, agent_id="b-1")

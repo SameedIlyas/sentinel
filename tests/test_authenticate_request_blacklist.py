@@ -36,7 +36,7 @@ def _build_test_app(db_session):
     return app
 
 
-def _make_user(db_session, role: UserRole = UserRole.ADMIN) -> User:
+def _make_user(db_session, role: UserRole = UserRole.ORG_ADMIN) -> User:
     from policy_engine.auth.jwt_utils import get_password_hash
     import uuid
 

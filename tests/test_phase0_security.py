@@ -917,7 +917,7 @@ class TestRBACUnit:
         from policy_engine.auth.rbac import require_role
         from policy_engine.models.user import UserRole
 
-        checker = require_role([UserRole.ADMIN])
+        checker = require_role([UserRole.ORG_ADMIN])
         assert callable(checker)
 
     def test_require_permission_returns_checker_function(self):
@@ -945,7 +945,7 @@ class TestRBACUnit:
         from policy_engine.models.user import UserRole
 
         mock_user = MagicMock()
-        mock_user.role = UserRole.ADMIN
+        mock_user.role = UserRole.ORG_ADMIN
         result = get_admin_user(current_user=mock_user)
         assert result is mock_user
 
@@ -977,7 +977,7 @@ class TestRBACUnit:
         from policy_engine.auth.rbac import require_role
         from policy_engine.models.user import UserRole
 
-        checker = require_role([UserRole.ADMIN])
+        checker = require_role([UserRole.ORG_ADMIN])
         mock_user = MagicMock()
         mock_user.role = UserRole.VIEWER
         with patch("policy_engine.auth.rbac.get_current_user", return_value=mock_user):
@@ -990,9 +990,9 @@ class TestRBACUnit:
         from policy_engine.auth.rbac import require_role
         from policy_engine.models.user import UserRole
 
-        checker = require_role([UserRole.ADMIN])
+        checker = require_role([UserRole.ORG_ADMIN])
         mock_user = MagicMock()
-        mock_user.role = UserRole.ADMIN
+        mock_user.role = UserRole.ORG_ADMIN
         result = checker(current_user=mock_user)
         assert result is mock_user
 
@@ -1017,7 +1017,7 @@ class TestRBACUnit:
 
         checker = require_permission("policies", "read")
         mock_user = MagicMock()
-        mock_user.role = UserRole.ADMIN
+        mock_user.role = UserRole.ORG_ADMIN
         with patch("policy_engine.auth.rbac.has_permission", return_value=True):
             result = checker(current_user=mock_user)
         assert result is mock_user
