@@ -11,8 +11,9 @@ import io
 import json
 
 from policy_engine.database import get_db
-from policy_engine.auth.rbac import authenticate_request
+from policy_engine.auth.rbac import authenticate_request, authenticate_request_context, AuthContext
 from policy_engine.models.audit_log import AuditLog, Decision
+from policy_engine.models.user import UserRole
 from policy_engine.models.schemas import (
     AuditLogCreate,
     AuditLogResponse,
@@ -90,7 +91,7 @@ async def create_audit_log(
 
 @router.get("/logs", response_model=AuditLogListResponse)
 async def get_audit_logs(
-    auth_id: str = Depends(authenticate_request),
+    auth: AuthContext = Depends(authenticate_request_context),
     db: Session = Depends(get_db),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
@@ -126,13 +127,16 @@ async def get_audit_logs(
     Returns:
         Paginated list of audit logs
     """
-    # Build query
+    # Build query — scope to caller's organization (CRIT-001). SYSTEM_ADMIN
+    # bypasses the scope so platform operators can still triage cross-tenant.
     query = db.query(AuditLog)
-    
+    if not (auth.is_user and auth.role == UserRole.SYSTEM_ADMIN):
+        query = query.filter(AuditLog.organization_id == auth.organization_id)
+
     # Apply filters
     if filter_agent_id:
         query = query.filter(AuditLog.agent_id == filter_agent_id)
-    
+
     if filter_user_id:
         query = query.filter(AuditLog.user_id == filter_user_id)
     
@@ -206,7 +210,7 @@ async def get_audit_logs(
 @router.get("/logs/export")
 async def export_audit_logs(
     format: Literal["json", "csv"] = Query("json", description="Export format"),
-    auth_id: str = Depends(authenticate_request),
+    auth: AuthContext = Depends(authenticate_request_context),
     db: Session = Depends(get_db),
     filter_agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
     filter_user_id: Optional[str] = Query(None, description="Filter by user ID"),
@@ -239,9 +243,11 @@ async def export_audit_logs(
     Returns:
         File download response
     """
-    # Build query (same filters as get_audit_logs)
+    # Build query (same filters as get_audit_logs). Tenancy scope first.
     query = db.query(AuditLog)
-    
+    if not (auth.is_user and auth.role == UserRole.SYSTEM_ADMIN):
+        query = query.filter(AuditLog.organization_id == auth.organization_id)
+
     if filter_agent_id:
         query = query.filter(AuditLog.agent_id == filter_agent_id)
     
@@ -368,25 +374,17 @@ async def export_audit_logs(
 @router.get("/logs/{log_id}", response_model=AuditLogResponse)
 async def get_audit_log(
     log_id: str,
-    auth_id: str = Depends(authenticate_request),
+    auth: AuthContext = Depends(authenticate_request_context),
     db: Session = Depends(get_db)
 ):
     """
     Get a specific audit log entry by ID
-    
-    Args:
-        log_id: Audit log ID
-        agent_id: Authenticated agent ID
-        db: Database session
-        
-    Returns:
-        Audit log entry
-        
-    Raises:
-        HTTPException: If log not found
     """
-    log = db.query(AuditLog).filter(AuditLog.id == log_id).first()
-    
+    q = db.query(AuditLog).filter(AuditLog.id == log_id)
+    if not (auth.is_user and auth.role == UserRole.SYSTEM_ADMIN):
+        q = q.filter(AuditLog.organization_id == auth.organization_id)
+    log = q.first()
+
     if not log:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

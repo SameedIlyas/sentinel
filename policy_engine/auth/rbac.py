@@ -1,5 +1,6 @@
 """RBAC middleware and permission decorators"""
 
+from dataclasses import dataclass
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
@@ -7,9 +8,26 @@ from typing import Callable, List, Optional
 
 from policy_engine.database import get_db
 from policy_engine.models.user import User, UserRole, has_permission
+from policy_engine.models.agent import Agent
 from policy_engine.auth.jwt_utils import decode_access_token
 from policy_engine.auth.api_key import _verify_api_key_logic
 from policy_engine.config import settings
+
+
+@dataclass(frozen=True)
+class AuthContext:
+    """Auth result for a request that may come via JWT or API key.
+
+    ``identity`` is the user_id or agent_id; ``organization_id`` is the tenant
+    boundary required by every multi-tenant query. ``is_user`` distinguishes
+    a human caller from an agent caller for routes that need that signal.
+    ``role`` is the user's role when ``is_user`` is True, otherwise None.
+    """
+
+    identity: str
+    organization_id: Optional[str]
+    is_user: bool
+    role: Optional[UserRole] = None
 
 
 # HTTP Bearer token security scheme
@@ -76,22 +94,20 @@ def get_current_user(
     return user
 
 
-def authenticate_request(
+def authenticate_request_context(
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    db: Session = Depends(get_db)
-) -> str:
+    db: Session = Depends(get_db),
+) -> AuthContext:
     """
     Flexible auth: accepts either JWT bearer token or X-API-Key header.
-    Returns an identifier string (user_id or agent_id).
+    Returns an :class:`AuthContext` carrying identity + organization_id so
+    multi-tenant routes can scope every query. See CRIT-001/004 in REVIEW.md.
     """
     # Try JWT bearer token first
     if credentials is not None:
         payload = decode_access_token(credentials.credentials)
         if payload and payload.get("user_id"):
-            # Mirror the blacklist check from get_current_user — logout must
-            # invalidate the token across every dependency, not just the routes
-            # that use get_current_user. See CRIT-007 in REVIEW.md.
             jti = payload.get("jti")
             if jti:
                 from policy_engine.services.token_blacklist import get_token_blacklist
@@ -103,20 +119,44 @@ def authenticate_request(
                     )
             user = db.query(User).filter(User.id == payload["user_id"]).first()
             if user and user.is_active:
-                return user.id
+                return AuthContext(
+                    identity=user.id,
+                    organization_id=user.organization_id,
+                    is_user=True,
+                    role=user.role,
+                )
 
     # Try API key — delegate entirely to api_key.py to avoid duplicated logic
     api_key = request.headers.get(settings.API_KEY_HEADER)
     if api_key:
-        try:
-            return _verify_api_key_logic(api_key, db)
-        except HTTPException:
-            raise
+        agent_id = _verify_api_key_logic(api_key, db)
+        # Resolve org_id from the agent record so agent-driven writes/reads
+        # stay scoped to the tenant that owns the agent.
+        agent = db.query(Agent).filter(Agent.id == agent_id).first()
+        return AuthContext(
+            identity=agent_id,
+            organization_id=agent.organization_id if agent else None,
+            is_user=False,
+        )
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Not authenticated. Provide a Bearer token or X-API-Key header.",
     )
+
+
+def authenticate_request(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    db: Session = Depends(get_db),
+) -> str:
+    """Back-compat shim — returns just the identity string.
+
+    Prefer :func:`authenticate_request_context` for tenant-scoped routes.
+    """
+    return authenticate_request_context(
+        request=request, credentials=credentials, db=db
+    ).identity
 
 
 def require_role(allowed_roles: List[UserRole]) -> Callable:
