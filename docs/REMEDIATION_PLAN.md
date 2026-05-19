@@ -20,17 +20,18 @@
 |---|---|---|
 | CRIT-007 — auth blacklist on `authenticate_request` | ✅ landed | `714256b` |
 | CRIT-001 — tenancy on `/v1/audit/logs` | ✅ landed (audit-route slice only) | `011b15b` |
-| CRIT-001 (rest) — tenancy on agents / policies / alerts | ⬜ pending | PR #2 |
-| CRIT-004 — tenancy on `/v1/clinical/hitl/*` | ⬜ pending | PR #3 |
-| CRIT-013 — WebSocket ticket pattern | ⬜ pending | PR #4 |
-| CRIT-009 — Postgres `userrole` enum healthcare values | ⬜ pending | PR #5 |
-| CRIT-012 — tier guards on `/clinic/*` dashboard routes | ⬜ pending | PR #6 |
-| CRIT-011 — Zod-validate localStorage user object | ⬜ pending | PR #7 |
-| CRIT-006 — Stripe `subscription.updated` writes `org.tier` | ⬜ pending | PR #8 |
-| CRIT-010 — `organization_id NOT NULL` × 13 tables | ⬜ pending | PR #9 |
-| CRIT-008 — retention with legal-hold + archive durability | ⬜ pending | PR #10 |
-| CRIT-005 — prior-auth seq_no + tail-deletion detection | ⬜ pending | PR #11 |
-| CRIT-002 + CRIT-003 — HITL audit-chain redesign | ⬜ pending | PR #12 (epic) |
+| CRIT-001 (rest) — tenancy on agents / policies / alerts | ✅ landed | `13e21e8` |
+| CRIT-004 — tenancy on `/v1/clinical/hitl/*` | ✅ landed | `13e21e8` |
+| CRIT-013 — WebSocket ticket pattern | ✅ landed | `10ec333` |
+| CRIT-009 — Postgres `userrole` enum healthcare values | ✅ landed | `9c1af08` |
+| CRIT-012 — tier guards on `/clinic/*` dashboard routes | ✅ landed | `7edcee0` |
+| CRIT-011 — Zod-validate localStorage user object | ✅ landed (partial — HttpOnly cookie deferred) | `893daa6` |
+| CRIT-006 — Stripe `subscription.updated` writes `org.tier` | ✅ landed | `a73dbe7` |
+| CRIT-010 — `organization_id NOT NULL` × 13 tables | ✅ landed | `0719566` |
+| CRIT-008 — retention with legal-hold + archive durability | ✅ landed | `2d4431b` |
+| CRIT-005 — prior-auth seq_no + tail-deletion detection | ✅ landed | `5689a6e` |
+| CRIT-002 + CRIT-003 — HITL audit-chain redesign | ✅ landed | `8ce2c4c` |
+| W-1 — dev deps (stripe / freezegun / testcontainers) | ✅ landed | `10ec333` |
 
 Order is **not** strictly required, but the dependency arrows below tell you
 which PRs unblock which.
