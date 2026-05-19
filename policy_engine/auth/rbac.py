@@ -35,21 +35,36 @@ security = HTTPBearer(auto_error=False)
 
 
 def get_current_user(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ) -> User:
+    """Get the current authenticated user from a JWT.
+
+    Accepts the JWT in either:
+
+    - the ``Authorization: Bearer <jwt>`` header (legacy / non-browser
+      clients — CI, SDK, server-to-server callers); OR
+    - the HttpOnly ``access_token`` cookie set by ``/v1/auth/login``
+      (browser dashboard — CRIT-011 close, removes the localStorage
+      XSS exfil surface).
     """
-    Get the current authenticated user from JWT token
-    """
-    if credentials is None:
+    token: Optional[str] = None
+    if credentials is not None:
+        token = credentials.credentials
+    if token is None:
+        # CRIT-011 — fall back to the HttpOnly session cookie.
+        from policy_engine.auth.session_cookie import read_session_token
+
+        token = read_session_token(request)
+
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
-    token = credentials.credentials
-    
+
     payload = decode_access_token(token)
     if payload is None:
         raise HTTPException(
@@ -104,9 +119,17 @@ def authenticate_request_context(
     Returns an :class:`AuthContext` carrying identity + organization_id so
     multi-tenant routes can scope every query. See CRIT-001/004 in REVIEW.md.
     """
-    # Try JWT bearer token first
+    # Try JWT — header first, then HttpOnly cookie (CRIT-011).
+    jwt_token: Optional[str] = None
     if credentials is not None:
-        payload = decode_access_token(credentials.credentials)
+        jwt_token = credentials.credentials
+    if jwt_token is None:
+        from policy_engine.auth.session_cookie import read_session_token
+
+        jwt_token = read_session_token(request)
+
+    if jwt_token:
+        payload = decode_access_token(jwt_token)
         if payload and payload.get("user_id"):
             jti = payload.get("jti")
             if jti:

@@ -808,7 +808,12 @@ class TestRBACUnit:
 
         db = MagicMock()
         with pytest.raises(HTTPException) as exc_info:
-            get_current_user(credentials=None, db=db)
+            # CRIT-011 — get_current_user takes a Request so it can
+            # consult the HttpOnly session cookie when no bearer header
+            # is present. Tests pass a mock with empty .cookies.
+            mock_request = MagicMock()
+            mock_request.cookies = {}
+            get_current_user(request=mock_request, credentials=None, db=db)
         assert exc_info.value.status_code == 401
 
     def test_get_current_user_raises_401_for_invalid_token(self):
@@ -821,7 +826,8 @@ class TestRBACUnit:
         db = MagicMock()
         with patch("policy_engine.auth.rbac.decode_access_token", return_value=None):
             with pytest.raises(HTTPException) as exc_info:
-                get_current_user(credentials=creds, db=db)
+                mock_request = MagicMock(); mock_request.cookies = {}
+                get_current_user(request=mock_request, credentials=creds, db=db)
         assert exc_info.value.status_code == 401
 
     def test_get_current_user_raises_401_for_missing_user_id(self):
@@ -835,8 +841,9 @@ class TestRBACUnit:
         with patch("policy_engine.auth.rbac.decode_access_token", return_value={"jti": "abc"}):
             with patch("policy_engine.services.token_blacklist.get_token_blacklist") as mock_bl:
                 mock_bl.return_value.is_blacklisted.return_value = False
+                mock_request = MagicMock(); mock_request.cookies = {}
                 with pytest.raises(HTTPException) as exc_info:
-                    get_current_user(credentials=creds, db=db)
+                    get_current_user(request=mock_request, credentials=creds, db=db)
         assert exc_info.value.status_code == 401
 
     def test_get_current_user_raises_401_when_user_not_found(self):
@@ -853,8 +860,9 @@ class TestRBACUnit:
         with patch("policy_engine.auth.rbac.decode_access_token", return_value=payload):
             with patch("policy_engine.services.token_blacklist.get_token_blacklist") as mock_bl:
                 mock_bl.return_value.is_blacklisted.return_value = False
+                mock_request = MagicMock(); mock_request.cookies = {}
                 with pytest.raises(HTTPException) as exc_info:
-                    get_current_user(credentials=creds, db=db)
+                    get_current_user(request=mock_request, credentials=creds, db=db)
         assert exc_info.value.status_code == 401
 
     def test_get_current_user_raises_403_for_inactive_user(self):
@@ -873,8 +881,9 @@ class TestRBACUnit:
         with patch("policy_engine.auth.rbac.decode_access_token", return_value=payload):
             with patch("policy_engine.services.token_blacklist.get_token_blacklist") as mock_bl:
                 mock_bl.return_value.is_blacklisted.return_value = False
+                mock_request = MagicMock(); mock_request.cookies = {}
                 with pytest.raises(HTTPException) as exc_info:
-                    get_current_user(credentials=creds, db=db)
+                    get_current_user(request=mock_request, credentials=creds, db=db)
         assert exc_info.value.status_code == 403
 
     def test_get_current_user_returns_user_when_valid(self):
@@ -892,7 +901,8 @@ class TestRBACUnit:
         with patch("policy_engine.auth.rbac.decode_access_token", return_value=payload):
             with patch("policy_engine.services.token_blacklist.get_token_blacklist") as mock_bl:
                 mock_bl.return_value.is_blacklisted.return_value = False
-                result = get_current_user(credentials=creds, db=db)
+                mock_request = MagicMock(); mock_request.cookies = {}
+                result = get_current_user(request=mock_request, credentials=creds, db=db)
         assert result is mock_user
 
     def test_get_current_user_raises_401_for_blacklisted_token(self):
@@ -907,8 +917,9 @@ class TestRBACUnit:
         with patch("policy_engine.auth.rbac.decode_access_token", return_value=payload):
             with patch("policy_engine.services.token_blacklist.get_token_blacklist") as mock_bl:
                 mock_bl.return_value.is_blacklisted.return_value = True
+                mock_request = MagicMock(); mock_request.cookies = {}
                 with pytest.raises(HTTPException) as exc_info:
-                    get_current_user(credentials=creds, db=db)
+                    get_current_user(request=mock_request, credentials=creds, db=db)
         assert exc_info.value.status_code == 401
         assert "revoked" in exc_info.value.detail.lower()
 

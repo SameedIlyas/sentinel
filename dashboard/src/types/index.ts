@@ -68,10 +68,22 @@ export interface LoginRequest {
 }
 
 export interface TokenResponse {
+  /**
+   * CRIT-011 — empty string in the browser cookie path. The HttpOnly
+   * ``access_token`` cookie carries the credential. Non-browser SDK
+   * callers that rely on this field should switch to the X-API-Key
+   * authentication path.
+   */
   access_token: string;
   token_type: string;
   expires_in: number;
   user: User;
+  /**
+   * Double-submit CSRF token. The JS-readable companion to the
+   * HttpOnly access-token cookie; the dashboard echoes it into
+   * ``X-CSRF-Token`` on mutating requests.
+   */
+  csrf_token?: string | null;
 }
 
 // ============================================================

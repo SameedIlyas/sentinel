@@ -17,23 +17,42 @@ export interface UseWebSocketOptions {
 }
 
 /**
- * Build a fresh single-use WebSocket ticket by calling /v1/ws/ticket
- * with the JWT in the Authorization header. CRIT-013: the JWT must
- * never appear in the WebSocket URL. The returned ticket is short-lived
- * (~30s) and consumed on first use by the server.
+ * Build a fresh single-use WebSocket ticket by calling /v1/ws/ticket.
+ *
+ * CRIT-013 — the JWT must never appear in the WebSocket URL.
+ * CRIT-011 — the JWT lives in an HttpOnly cookie now, so this request
+ * uses ``credentials: 'include'`` to send the cookie automatically;
+ * there is no localStorage access token to read. The ticket itself is
+ * short-lived (~30s) and consumed on first use by the server.
+ *
+ * The mutating POST also needs the CSRF double-submit header. The
+ * cookie is JS-readable; we lift it into ``X-CSRF-Token`` here.
  */
+function readCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const target = name + '=';
+  for (const part of document.cookie.split(';')) {
+    const trimmed = part.trim();
+    if (trimmed.startsWith(target)) {
+      return decodeURIComponent(trimmed.slice(target.length));
+    }
+  }
+  return null;
+}
+
 async function fetchWsTicket(): Promise<string | null> {
   const apiBase =
     (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:8000';
-  const token = localStorage.getItem('access_token');
-  if (!token) return null;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  const csrf = readCookie('csrf_token');
+  if (csrf) headers['X-CSRF-Token'] = csrf;
   try {
     const r = await fetch(`${apiBase.replace(/\/$/, '')}/v1/ws/ticket`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      credentials: 'include',
+      headers,
     });
     if (!r.ok) return null;
     const body = (await r.json()) as { ticket?: string };

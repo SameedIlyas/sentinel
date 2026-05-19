@@ -1,14 +1,25 @@
-import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
+import axios, {
+  AxiosInstance,
+  AxiosError,
+  InternalAxiosRequestConfig,
+} from 'axios';
 import { LoginRequest, TokenResponse, User } from '@/types';
 import { parseUser } from '@/types/userSchema';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
+const CSRF_COOKIE_NAME = 'csrf_token';
+const CSRF_HEADER_NAME = 'X-CSRF-Token';
+const MUTATING_METHODS = new Set(['post', 'put', 'delete', 'patch']);
 
 function formatApiDetail(detail: unknown): string {
   if (typeof detail === 'string') return detail;
   if (Array.isArray(detail)) {
     return detail
-      .map((d: any) => (typeof d === 'object' && d.msg ? d.msg : JSON.stringify(d)))
+      .map((d: any) =>
+        typeof d === 'object' && d.msg ? d.msg : JSON.stringify(d)
+      )
       .join('; ');
   }
   if (typeof detail === 'object' && detail !== null) {
@@ -17,51 +28,83 @@ function formatApiDetail(detail: unknown): string {
   return String(detail);
 }
 
+/**
+ * Read a cookie value from document.cookie. Used for the JS-readable
+ * ``csrf_token`` cookie issued by /v1/auth/login. The ``access_token``
+ * cookie is HttpOnly (CRIT-011 close) and is intentionally NOT
+ * accessible to JS — the browser sends it on every same-site request
+ * automatically.
+ */
+function readCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const target = name + '=';
+  for (const part of document.cookie.split(';')) {
+    const trimmed = part.trim();
+    if (trimmed.startsWith(target)) {
+      return decodeURIComponent(trimmed.slice(target.length));
+    }
+  }
+  return null;
+}
+
 class ApiClient {
   private client: AxiosInstance;
-  private tokenRefreshPromise: Promise<string> | null = null;
+  private tokenRefreshPromise: Promise<void> | null = null;
+  /** In-memory CSRF token cache — primed at login/refresh. */
+  private csrfToken: string | null = null;
 
   constructor() {
     this.client = axios.create({
       baseURL: API_BASE_URL,
       timeout: 30000,
+      // CRIT-011 — cookies must travel cross-origin to the API. The
+      // JWT lives in an HttpOnly cookie now; if withCredentials is
+      // false the browser drops it and every request 401s.
+      withCredentials: true,
       headers: {
         'Content-Type': 'application/json',
       },
     });
 
-    // Request interceptor to add auth token
+    // Request interceptor: echo the CSRF token on mutating requests
+    // (double-submit pattern enforced by the backend).
     this.client.interceptors.request.use(
       (config: InternalAxiosRequestConfig) => {
-        const token = this.getToken();
-        if (token && config.headers) {
-          config.headers.Authorization = `Bearer ${token}`;
+        if (
+          config.method &&
+          MUTATING_METHODS.has(config.method.toLowerCase())
+        ) {
+          const token = this.csrfToken || readCookie(CSRF_COOKIE_NAME);
+          if (token && config.headers) {
+            config.headers[CSRF_HEADER_NAME] = token;
+            this.csrfToken = token;
+          }
         }
         return config;
       },
       (error) => Promise.reject(error)
     );
 
-    // Response interceptor for error handling and token refresh
+    // Response interceptor — refresh on 401, normalise error detail.
     this.client.interceptors.response.use(
       (response) => response,
       async (error: AxiosError) => {
-        const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+        const originalRequest = error.config as InternalAxiosRequestConfig & {
+          _retry?: boolean;
+        };
 
-        // If 401 and not already retrying, try to refresh token
         if (error.response?.status === 401 && !originalRequest._retry) {
           originalRequest._retry = true;
 
           try {
-            const newToken = await this.refreshToken();
-            if (newToken && originalRequest.headers) {
-              originalRequest.headers.Authorization = `Bearer ${newToken}`;
-              return this.client(originalRequest);
-            }
+            await this.refreshToken();
+            return this.client(originalRequest);
           } catch (refreshError) {
-            // Refresh failed, clear auth and redirect to login
             this.clearAuth();
-            window.location.href = '/login';
+            // Redirect to login. Do not include any tokens in the URL.
+            if (typeof window !== 'undefined') {
+              window.location.href = '/login';
+            }
             return Promise.reject(refreshError);
           }
         }
@@ -78,18 +121,7 @@ class ApiClient {
     );
   }
 
-  // Token management
-  private getToken(): string | null {
-    return localStorage.getItem('access_token');
-  }
-
-  private setToken(token: string): void {
-    localStorage.setItem('access_token', token);
-  }
-
-  private clearToken(): void {
-    localStorage.removeItem('access_token');
-  }
+  // ── User cache (JS-readable, schema-validated) ─────────────────────
 
   private getUser(): User | null {
     // CRIT-011 — every cached value goes through a strict schema. A
@@ -127,24 +159,35 @@ class ApiClient {
   }
 
   private clearAuth(): void {
-    this.clearToken();
+    // CRIT-011 — the access token now lives in an HttpOnly cookie.
+    // There is nothing in localStorage to clear for the credential
+    // itself; we still drop any legacy `access_token` value to clean
+    // up after the migration. Logout is delivered by the backend
+    // clearing the cookie on the response.
     this.clearUser();
+    this.csrfToken = null;
+    try {
+      localStorage.removeItem('access_token');
+    } catch (_e) {
+      /* ignore */
+    }
   }
 
-  // Refresh token
-  private async refreshToken(): Promise<string> {
-    // Prevent multiple simultaneous refresh requests
+  // ── Token refresh ──────────────────────────────────────────────────
+
+  private async refreshToken(): Promise<void> {
     if (this.tokenRefreshPromise) {
       return this.tokenRefreshPromise;
     }
 
     this.tokenRefreshPromise = (async () => {
       try {
-        const response = await this.client.post<TokenResponse>('/v1/auth/refresh');
-        const { access_token, user } = response.data;
-        this.setToken(access_token);
+        const response = await this.client.post<TokenResponse>(
+          '/v1/auth/refresh'
+        );
+        const { user, csrf_token } = response.data;
         this.setUser(user);
-        return access_token;
+        if (csrf_token) this.csrfToken = csrf_token;
       } finally {
         this.tokenRefreshPromise = null;
       }
@@ -153,12 +196,16 @@ class ApiClient {
     return this.tokenRefreshPromise;
   }
 
-  // Authentication methods
+  // ── Authentication ─────────────────────────────────────────────────
+
   async login(credentials: LoginRequest): Promise<TokenResponse> {
-    const response = await this.client.post<TokenResponse>('/v1/auth/login', credentials);
-    const { access_token, user } = response.data;
-    this.setToken(access_token);
+    const response = await this.client.post<TokenResponse>(
+      '/v1/auth/login',
+      credentials
+    );
+    const { user, csrf_token } = response.data;
     this.setUser(user);
+    if (csrf_token) this.csrfToken = csrf_token;
     return response.data;
   }
 
@@ -181,10 +228,15 @@ class ApiClient {
   }
 
   isAuthenticated(): boolean {
-    return !!this.getToken();
+    // CRIT-011 — the HttpOnly access-token cookie is invisible to JS, so
+    // we cannot probe its presence directly. The cached user record is
+    // a good-enough heuristic: AuthContext's bootstrap calls
+    // validateToken() against the server and gates on the response.
+    return !!this.getUser();
   }
 
-  // Generic API methods
+  // ── Generic API methods ────────────────────────────────────────────
+
   async get<T>(url: string, params?: any): Promise<T> {
     const response = await this.client.get<T>(url, { params });
     return response.data;

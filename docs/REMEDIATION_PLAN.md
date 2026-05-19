@@ -25,7 +25,7 @@
 | CRIT-013 — WebSocket ticket pattern | ✅ landed | `10ec333` |
 | CRIT-009 — Postgres `userrole` enum healthcare values | ✅ landed | `9c1af08` |
 | CRIT-012 — tier guards on `/clinic/*` dashboard routes | ✅ landed | `7edcee0` |
-| CRIT-011 — Zod-validate localStorage user object | ✅ landed (partial — HttpOnly cookie deferred) | `893daa6` |
+| CRIT-011 — Zod-validate user object + HttpOnly cookie session | ✅ landed (Zod `893daa6` + HttpOnly cookie follow-up) |
 | CRIT-006 — Stripe `subscription.updated` writes `org.tier` | ✅ landed | `a73dbe7` |
 | CRIT-010 — `organization_id NOT NULL` × 13 tables | ✅ landed | `0719566` |
 | CRIT-008 — retention with legal-hold + archive durability | ✅ landed | `2d4431b` |

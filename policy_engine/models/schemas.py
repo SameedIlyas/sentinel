@@ -511,11 +511,34 @@ class UserLogin(BaseModel):
 
 
 class TokenResponse(BaseModel):
-    """Schema for JWT token response"""
-    access_token: str = Field(..., description="JWT access token")
+    """Schema for JWT token response.
+
+    CRIT-011 — production deployments deliver the JWT as an HttpOnly
+    cookie. ``access_token`` in the body is kept as an empty string for
+    backward compatibility with non-browser SDK callers; those callers
+    should switch to reading it from the ``Set-Cookie`` header or use
+    the X-API-Key authentication path. ``csrf_token`` is the
+    JS-readable companion the dashboard echoes into the
+    ``X-CSRF-Token`` header on mutating requests.
+    """
+    access_token: str = Field(
+        default="",
+        description=(
+            "JWT access token. Empty when the cookie path is in use "
+            "(HttpOnly cookie carries the credential)."
+        ),
+    )
     token_type: str = Field(default="bearer", description="Token type")
     expires_in: int = Field(..., description="Token expiration time in seconds")
     user: UserResponse = Field(..., description="Authenticated user information")
+    csrf_token: Optional[str] = Field(
+        default=None,
+        description=(
+            "Double-submit CSRF token, mirrored as a JS-readable cookie. "
+            "Browser clients must echo this in X-CSRF-Token for mutating "
+            "requests."
+        ),
+    )
 
 
 class PasswordChange(BaseModel):

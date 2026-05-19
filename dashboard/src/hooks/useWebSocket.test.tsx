@@ -133,8 +133,17 @@ describe('useWebSocket', () => {
     expect(calls).toEqual(['ping']);
   });
 
-  it('fetches a fresh ticket and omits the JWT from the URL (CRIT-013)', async () => {
+  it('fetches a fresh ticket via cookie auth and omits the JWT from the URL (CRIT-011 + CRIT-013)', async () => {
     const fetchMock = installFetchMock();
+
+    // CRIT-011 — the access-token cookie is HttpOnly and JS can never
+    // read it. We simulate the runtime contract by leaving
+    // document.cookie holding only the JS-readable csrf_token.
+    Object.defineProperty(document, 'cookie', {
+      configurable: true,
+      get: () => 'csrf_token=csrf-abc',
+      set: () => undefined,
+    });
 
     function Parent() {
       useWebSocket('/ws/dashboard');
@@ -145,14 +154,18 @@ describe('useWebSocket', () => {
     // Wait for the ticket POST to land and the socket to be opened.
     await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1));
 
-    // /v1/ws/ticket was called with the bearer token in the header.
+    // /v1/ws/ticket was called with credentials:'include' so the
+    // browser ships the HttpOnly cookie, NOT a bearer header.
     expect(fetchMock).toHaveBeenCalled();
     const [url, init] = fetchMock.mock.calls[0];
     expect(String(url)).toMatch(/\/v1\/ws\/ticket$/);
     expect(init?.method).toBe('POST');
-    expect(init?.headers?.Authorization).toBe('Bearer jwt-here');
+    expect(init?.credentials).toBe('include');
+    expect(init?.headers?.Authorization).toBeUndefined();
+    expect(init?.headers?.['X-CSRF-Token']).toBe('csrf-abc');
 
-    // The opened WebSocket URL contains a ticket and NOT the JWT.
+    // The opened WebSocket URL contains a ticket and NEITHER the JWT
+    // nor a ?token= parameter (CRIT-013).
     const wsUrl = FakeWebSocket.instances[0].url;
     expect(wsUrl).toMatch(/[?&]ticket=ticket-\d+/);
     expect(wsUrl).not.toContain('jwt-here');
