@@ -9,7 +9,7 @@ import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import Login from '@/components/auth/Login';
 import AppLayout from '@/components/layout/AppLayout';
-import { UserRole } from '@/types';
+import { UserRole, CLINIC_TIERS } from '@/types';
 import { WalkthroughProvider } from '@/walkthrough';
 import { I18nProvider } from '@/i18n';
 
@@ -426,19 +426,19 @@ const ThemedApp: React.FC = () => {
                 <Route path="/risk/portfolio"              element={<RiskPortfolio />} />
                 <Route path="/risk/scores/:modelId"        element={<RiskScoreDetail />} />
 
-                {/* ── Clinic-tier surface ── */}
-                <Route path="/clinic"                       element={<ClinicDashboard />} />
-                <Route path="/clinic/onboarding"            element={<ClinicOnboarding />} />
-                <Route path="/clinic/tools"                 element={<ClinicToolList />} />
-                <Route path="/clinic/tools/new"             element={<ClinicToolEditor />} />
-                <Route path="/clinic/tools/:id"             element={<ClinicToolEditor />} />
-                <Route path="/clinic/policies"              element={<ClinicPolicyLibrary />} />
-                <Route path="/clinic/alerts"                element={<ClinicAlertCenter />} />
-                <Route path="/clinic/shadow-ai"             element={<ClinicShadowAi />} />
-                <Route path="/clinic/reports"               element={<ClinicReports />} />
-                <Route path="/clinic/settings/practice"     element={<ClinicPracticeSet />} />
-                <Route path="/clinic/settings/compliance"   element={<ClinicComplianceSet />} />
-                <Route path="/clinic/settings/billing"      element={<ClinicBillingSet />} />
+                {/* ── Clinic-tier surface (CRIT-012: tier-gated) ── */}
+                <Route path="/clinic"                       element={<ProtectedRoute requiredTiers={CLINIC_TIERS}><ClinicDashboard /></ProtectedRoute>} />
+                <Route path="/clinic/onboarding"            element={<ProtectedRoute requiredTiers={CLINIC_TIERS}><ClinicOnboarding /></ProtectedRoute>} />
+                <Route path="/clinic/tools"                 element={<ProtectedRoute requiredTiers={CLINIC_TIERS}><ClinicToolList /></ProtectedRoute>} />
+                <Route path="/clinic/tools/new"             element={<ProtectedRoute requiredTiers={CLINIC_TIERS}><ClinicToolEditor /></ProtectedRoute>} />
+                <Route path="/clinic/tools/:id"             element={<ProtectedRoute requiredTiers={CLINIC_TIERS}><ClinicToolEditor /></ProtectedRoute>} />
+                <Route path="/clinic/policies"              element={<ProtectedRoute requiredTiers={CLINIC_TIERS}><ClinicPolicyLibrary /></ProtectedRoute>} />
+                <Route path="/clinic/alerts"                element={<ProtectedRoute requiredTiers={CLINIC_TIERS}><ClinicAlertCenter /></ProtectedRoute>} />
+                <Route path="/clinic/shadow-ai"             element={<ProtectedRoute requiredTiers={CLINIC_TIERS}><ClinicShadowAi /></ProtectedRoute>} />
+                <Route path="/clinic/reports"               element={<ProtectedRoute requiredTiers={CLINIC_TIERS}><ClinicReports /></ProtectedRoute>} />
+                <Route path="/clinic/settings/practice"     element={<ProtectedRoute requiredTiers={CLINIC_TIERS}><ClinicPracticeSet /></ProtectedRoute>} />
+                <Route path="/clinic/settings/compliance"   element={<ProtectedRoute requiredTiers={CLINIC_TIERS}><ClinicComplianceSet /></ProtectedRoute>} />
+                <Route path="/clinic/settings/billing"      element={<ProtectedRoute requiredTiers={CLINIC_TIERS}><ClinicBillingSet /></ProtectedRoute>} />
 
                 {/* Settings */}
                 <Route
