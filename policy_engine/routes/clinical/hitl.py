@@ -138,29 +138,33 @@ def _append_audit_entry(
     comments: Optional[str],
     db: Session,
 ) -> None:
-    """Append a new audit trail entry and recompute the hash chain for this review."""
-    existing_entries = (
+    """Append a single audit entry. Append-only — NEVER updates prior rows.
+
+    CRIT-002 fix — historically this rebuilt the entire chain hash on
+    every append, which rewrote prior rows' ``entry_hash`` columns and
+    defeated the immutability contract. The verifier subsequently always
+    returned True because the chain was being normalised on every write.
+
+    Contract:
+      1. Read the last persisted entry's ``entry_hash``.
+      2. Compute the new entry's hash from that ``prev_hash``.
+      3. INSERT the new row. Never UPDATE.
+    """
+    # CRIT-002 — query for the most recent existing entry only. The
+    # previous code loaded the entire chain just to rebuild every hash.
+    last_entry = (
         db.query(HITLAuditTrail)
         .filter(HITLAuditTrail.review_id == review_id)
-        .order_by(HITLAuditTrail.timestamp)
-        .all()
+        .order_by(HITLAuditTrail.timestamp.desc())
+        .first()
     )
+    prev_hash = (last_entry.entry_hash if last_entry else "") or ""
 
     now = datetime.utcnow()
 
-    domain_entries = [
-        HITLAuditEntry(
-            actor_id=e.actor_id or "",
-            action=e.action,
-            old_status=e.old_status,
-            new_status=e.new_status,
-            comments=e.comments,
-            timestamp=e.timestamp.isoformat() if e.timestamp else now.isoformat(),
-            entry_hash=e.entry_hash or "",
-        )
-        for e in existing_entries
-    ]
-
+    # CRIT-003 — feed the *datetime* into the domain entry; the domain
+    # normalises both write- and verify-time timestamps to the same
+    # offset-free string, so the hash matches on read-back.
     new_domain_entry = HITLAuditEntry(
         actor_id=actor_id,
         action=action,
@@ -170,12 +174,7 @@ def _append_audit_entry(
         timestamp=now.isoformat(),
         entry_hash="",
     )
-    domain_entries.append(new_domain_entry)
-
-    build_audit_chain(domain_entries)
-
-    for db_entry, domain_entry in zip(existing_entries, domain_entries[:-1]):
-        db_entry.entry_hash = domain_entry.entry_hash
+    new_domain_entry.entry_hash = new_domain_entry.compute_hash(prev_hash)
 
     new_db_entry = HITLAuditTrail(
         id=str(uuid.uuid4()),

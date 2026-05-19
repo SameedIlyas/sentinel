@@ -209,6 +209,7 @@ def test_create_hitl_review_clamps_risk_score(db_session):
         ai_decision={},
         risk_score=999.9,
         priority="medium",
+        organization_id="probe-org",
     )
     review = db_session.query(HITLReview).filter_by(id=review_id).first()
     assert review.risk_score == 100.0
@@ -222,6 +223,7 @@ def test_create_hitl_review_invalid_priority_falls_back_to_medium(db_session):
         ai_decision={},
         risk_score=10.0,
         priority="garbage",
+        organization_id="probe-org",
     )
     review = db_session.query(HITLReview).filter_by(id=review_id).first()
     assert review.priority == "medium"

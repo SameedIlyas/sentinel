@@ -56,4 +56,7 @@ class HITLAuditTrail(Base):
     new_status = Column(String, nullable=True)
     comments = Column(String, nullable=True)
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
-    entry_hash = Column(String, nullable=False, default="")
+    # CRIT-002 — entry_hash has no default and is NOT NULL. Every
+    # legitimate append computes a real hash from the previous
+    # persisted entry; an empty-string default papered over the bug.
+    entry_hash = Column(String, nullable=False)
