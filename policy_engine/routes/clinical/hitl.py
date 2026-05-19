@@ -1,13 +1,25 @@
-"""HITL Validation Portal endpoints."""
+"""HITL Validation Portal endpoints.
+
+Tenancy: every list/get/assign/approve/reject/escalate/audit-trail
+endpoint is scoped to the caller's ``organization_id``. SYSTEM_ADMIN
+bypasses the scope so platform operators can still triage cross-tenant.
+Cross-tenant access returns 404, never 403, to avoid leaking the
+existence of other-tenant rows (CRIT-004).
+
+POST writes ``organization_id = current_user.organization_id`` and
+ignores any client-supplied value, so a cross-tenant insert is
+impossible.
+"""
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.query import Query as SAQuery
 from typing import List, Optional
 import uuid
 from datetime import datetime
 
 from policy_engine.database import get_db
 from policy_engine.auth.rbac import get_current_user
-from policy_engine.models.user import User, has_permission
+from policy_engine.models.user import User, UserRole, has_permission
 from policy_engine.models.hitl import HITLReview, HITLAuditTrail, HITLAssignment
 from policy_engine.domain.clinical.hitl import (
     HITLAuditEntry,
@@ -30,6 +42,9 @@ class HITLReviewCreate(BaseModel):
     risk_score: float = 0.0
     priority: str = "medium"
     sla_deadline: Optional[datetime] = None
+    # ``organization_id`` from the payload is IGNORED — the route forces
+    # it from the authenticated user's org. Field kept for backward
+    # compatibility but never trusted.
     organization_id: Optional[str] = None
 
 
@@ -63,6 +78,17 @@ class HITLReviewResponse(BaseModel):
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _is_system_admin(user: User) -> bool:
+    return user.role == UserRole.SYSTEM_ADMIN
+
+
+def _scope_to_tenant(query: SAQuery, user: User) -> SAQuery:
+    """Scope a HITLReview query to the caller's org (SYSTEM_ADMIN bypass)."""
+    if _is_system_admin(user):
+        return query
+    return query.filter(HITLReview.organization_id == user.organization_id)
+
+
 def _check_permission(current_user: User, action: str) -> None:
     if not has_permission(current_user.role, "hitl_reviews", action):
         raise HTTPException(
@@ -71,10 +97,18 @@ def _check_permission(current_user: User, action: str) -> None:
         )
 
 
-def _get_review_or_404(review_id: str, db: Session) -> HITLReview:
-    review = db.query(HITLReview).filter(HITLReview.id == review_id).first()
+def _get_review_or_404(
+    review_id: str, db: Session, current_user: User
+) -> HITLReview:
+    """Fetch a review scoped to the caller's org. 404 on miss or cross-tenant."""
+    review = _scope_to_tenant(
+        db.query(HITLReview).filter(HITLReview.id == review_id),
+        current_user,
+    ).first()
     if not review:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="HITL review not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="HITL review not found"
+        )
     return review
 
 
@@ -105,7 +139,6 @@ def _append_audit_entry(
     db: Session,
 ) -> None:
     """Append a new audit trail entry and recompute the hash chain for this review."""
-    # Fetch existing entries ordered by timestamp
     existing_entries = (
         db.query(HITLAuditTrail)
         .filter(HITLAuditTrail.review_id == review_id)
@@ -115,7 +148,6 @@ def _append_audit_entry(
 
     now = datetime.utcnow()
 
-    # Build domain objects from existing DB entries
     domain_entries = [
         HITLAuditEntry(
             actor_id=e.actor_id or "",
@@ -129,7 +161,6 @@ def _append_audit_entry(
         for e in existing_entries
     ]
 
-    # Create new domain entry
     new_domain_entry = HITLAuditEntry(
         actor_id=actor_id,
         action=action,
@@ -141,14 +172,11 @@ def _append_audit_entry(
     )
     domain_entries.append(new_domain_entry)
 
-    # Rebuild hash chain for all entries
     build_audit_chain(domain_entries)
 
-    # Update existing DB entries with recomputed hashes
     for db_entry, domain_entry in zip(existing_entries, domain_entries[:-1]):
         db_entry.entry_hash = domain_entry.entry_hash
 
-    # Create new DB entry
     new_db_entry = HITLAuditTrail(
         id=str(uuid.uuid4()),
         review_id=review_id,
@@ -175,7 +203,7 @@ def list_hitl_reviews(
     current_user: User = Depends(get_current_user),
 ):
     _check_permission(current_user, "read")
-    query = db.query(HITLReview)
+    query = _scope_to_tenant(db.query(HITLReview), current_user)
     if status_filter:
         query = query.filter(HITLReview.status == status_filter)
     if priority:
@@ -201,7 +229,8 @@ def create_hitl_review(
         status="pending",
         priority=payload.priority,
         sla_deadline=payload.sla_deadline,
-        organization_id=payload.organization_id,
+        # Force tenancy from the auth context. Never trust a client value.
+        organization_id=current_user.organization_id,
         created_at=now,
         updated_at=now,
     )
@@ -230,7 +259,7 @@ def get_hitl_review(
     current_user: User = Depends(get_current_user),
 ):
     _check_permission(current_user, "read")
-    review = _get_review_or_404(review_id, db)
+    review = _get_review_or_404(review_id, db, current_user)
     return _to_response(review)
 
 
@@ -242,7 +271,7 @@ def assign_hitl_review(
     current_user: User = Depends(get_current_user),
 ):
     _check_permission(current_user, "update")
-    review = _get_review_or_404(review_id, db)
+    review = _get_review_or_404(review_id, db, current_user)
     old_status = review.status
 
     review.assigned_to = payload.assigned_to
@@ -281,7 +310,7 @@ def approve_hitl_review(
     current_user: User = Depends(get_current_user),
 ):
     _check_permission(current_user, "update")
-    review = _get_review_or_404(review_id, db)
+    review = _get_review_or_404(review_id, db, current_user)
     old_status = review.status
 
     review.status = "approved"
@@ -310,7 +339,7 @@ def reject_hitl_review(
     current_user: User = Depends(get_current_user),
 ):
     _check_permission(current_user, "update")
-    review = _get_review_or_404(review_id, db)
+    review = _get_review_or_404(review_id, db, current_user)
     old_status = review.status
 
     review.status = "rejected"
@@ -339,7 +368,7 @@ def escalate_hitl_review(
     current_user: User = Depends(get_current_user),
 ):
     _check_permission(current_user, "update")
-    review = _get_review_or_404(review_id, db)
+    review = _get_review_or_404(review_id, db, current_user)
     old_status = review.status
 
     review.status = "escalated"
@@ -367,7 +396,9 @@ def get_audit_trail(
     current_user: User = Depends(get_current_user),
 ):
     _check_permission(current_user, "read")
-    _get_review_or_404(review_id, db)
+    # Use the scope helper so cross-tenant audit-trail probes 404 before
+    # touching the audit table at all.
+    _get_review_or_404(review_id, db, current_user)
 
     db_entries = (
         db.query(HITLAuditTrail)
@@ -376,7 +407,6 @@ def get_audit_trail(
         .all()
     )
 
-    # Verify chain integrity using domain logic
     domain_entries = [
         HITLAuditEntry(
             actor_id=e.actor_id or "",

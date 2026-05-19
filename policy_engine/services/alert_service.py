@@ -33,21 +33,16 @@ class AlertService:
         agent_id: str,
         description: str,
         audit_log_id: Optional[str] = None,
-        auto_deduplicate: bool = True
+        auto_deduplicate: bool = True,
+        organization_id: Optional[str] = None,
     ) -> Optional[Alert]:
-        """
-        Create a new alert with optional deduplication
-        
-        Args:
-            severity: Alert severity level
-            alert_type: Type of alert
-            agent_id: ID of agent that triggered the alert
-            description: Human-readable description
-            audit_log_id: Related audit log entry ID
-            auto_deduplicate: Whether to check for duplicate alerts
-            
-        Returns:
-            Created alert or None if deduplicated
+        """Create a new alert with optional deduplication.
+
+        ``organization_id`` MUST be supplied for any alert minted from a
+        policy evaluation so multi-tenant isolation holds (CRIT-001). The
+        synthesised alert inherits the org of the policy or agent that
+        triggered it — not the org of the request that happened to be in
+        flight.
         """
         try:
             # Check for duplicates if deduplication is enabled
@@ -57,8 +52,19 @@ class AlertService:
                         f"Alert deduplicated: type={alert_type}, agent={agent_id}"
                     )
                     return None
-            
-            # Create new alert
+
+            # Resolve organization_id from the agent record if not supplied.
+            if organization_id is None:
+                from policy_engine.models.agent import Agent
+
+                owner = (
+                    self.db.query(Agent.organization_id)
+                    .filter(Agent.id == agent_id)
+                    .first()
+                )
+                if owner is not None:
+                    organization_id = owner[0]
+
             alert = Alert(
                 id=str(uuid.uuid4()),
                 timestamp=datetime.now(timezone.utc),
@@ -67,9 +73,10 @@ class AlertService:
                 agent_id=agent_id,
                 description=description,
                 audit_log_id=audit_log_id,
-                acknowledged=False
+                acknowledged=False,
+                organization_id=organization_id,
             )
-            
+
             self.db.add(alert)
             self.db.commit()
             self.db.refresh(alert)
@@ -109,19 +116,24 @@ class AlertService:
         
         return existing is not None
     
-    def acknowledge_alert(self, alert_id: str, acknowledged_by: str) -> Optional[Alert]:
-        """
-        Acknowledge an alert
-        
-        Args:
-            alert_id: Alert ID
-            acknowledged_by: ID of user acknowledging the alert
-            
-        Returns:
-            Updated alert or None if not found
+    def acknowledge_alert(
+        self,
+        alert_id: str,
+        acknowledged_by: str,
+        organization_id: Optional[str] = None,
+    ) -> Optional[Alert]:
+        """Acknowledge an alert, optionally scoped to a tenant.
+
+        When ``organization_id`` is provided, the lookup is restricted to
+        rows whose ``organization_id`` matches — cross-tenant acks return
+        ``None`` so the caller surfaces a 404 (CRIT-001). Pass ``None``
+        only for SYSTEM_ADMIN callers.
         """
         try:
-            alert = self.db.query(Alert).filter(Alert.id == alert_id).first()
+            q = self.db.query(Alert).filter(Alert.id == alert_id)
+            if organization_id is not None:
+                q = q.filter(Alert.organization_id == organization_id)
+            alert = q.first()
             
             if not alert:
                 logger.warning(f"Alert not found: {alert_id}")

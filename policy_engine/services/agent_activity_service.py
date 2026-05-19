@@ -3,7 +3,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 
 from policy_engine.models.agent import Agent, AgentStatus
 from policy_engine.models.audit_log import AuditLog
@@ -136,45 +136,53 @@ class AgentActivityService:
         }
     
     @staticmethod
-    def get_all_agent_metrics(db: Session) -> Dict[str, Any]:
+    def get_all_agent_metrics(
+        db: Session,
+        organization_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Get aggregated metrics for all agents.
+
+        When ``organization_id`` is provided, results are scoped to that
+        tenant (CRIT-001). Pass ``None`` only for SYSTEM_ADMIN callers.
         """
-        Get aggregated metrics for all agents
-        
-        Args:
-            db: Database session
-            
-        Returns:
-            Dictionary with aggregated metrics
-        """
-        # Get all agents
-        agents = db.query(Agent).all()
-        
-        # Count by status
-        active_agents = db.query(func.count(Agent.id)).filter(
+        agents_q = db.query(Agent)
+        active_q = db.query(func.count(Agent.id)).filter(
             Agent.status == AgentStatus.ACTIVE
-        ).scalar() or 0
-        
-        inactive_agents = db.query(func.count(Agent.id)).filter(
+        )
+        inactive_q = db.query(func.count(Agent.id)).filter(
             Agent.status == AgentStatus.INACTIVE
-        ).scalar() or 0
-        
-        suspended_agents = db.query(func.count(Agent.id)).filter(
+        )
+        suspended_q = db.query(func.count(Agent.id)).filter(
             Agent.status == AgentStatus.SUSPENDED
-        ).scalar() or 0
-        
-        # Get metrics for each agent
+        )
+
+        if organization_id is not None:
+            agents_q = agents_q.filter(Agent.organization_id == organization_id)
+            active_q = active_q.filter(Agent.organization_id == organization_id)
+            inactive_q = inactive_q.filter(
+                Agent.organization_id == organization_id
+            )
+            suspended_q = suspended_q.filter(
+                Agent.organization_id == organization_id
+            )
+
+        agents = agents_q.all()
+        active_agents = active_q.scalar() or 0
+        inactive_agents = inactive_q.scalar() or 0
+        suspended_agents = suspended_q.scalar() or 0
+
         metrics = []
         for agent in agents:
             agent_metrics = AgentActivityService.get_agent_metrics(db, agent.id)
             if agent_metrics:
                 metrics.append(agent_metrics)
-        
+
         return {
             "metrics": metrics,
             "total_agents": len(agents),
             "active_agents": active_agents,
             "inactive_agents": inactive_agents,
-            "suspended_agents": suspended_agents
+            "suspended_agents": suspended_agents,
         }
     
     @staticmethod
