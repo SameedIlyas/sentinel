@@ -58,7 +58,7 @@ const TICKETS = (() => {
   return () => `ticket-${++n}`;
 })();
 
-function installFetchMock(): ReturnType<typeof vi.fn> {
+function installFetchMock() {
   const fetchMock = vi.fn(async (_input: any, _init?: any) => ({
     ok: true,
     json: async () => ({ ticket: TICKETS(), expires_in: 30 }),
